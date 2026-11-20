@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="align.css">
+  <title>MAZE BANK</title>
+</head>
+<body>
+  <main id="bank" class="bank hidden">
+    <aside class="sidebar">
+      <div class="logo">
+        <svg class="mark" viewBox="0 0 72 75" aria-hidden="true"><path d="M5 7h10v56H5zM23 7h13v56H23zM44 7h10v56H44zM61 7h6v56h-6z" fill="none" stroke="currentColor" stroke-width="5"/><path d="M5 69h62" stroke="currentColor" stroke-width="5"/></svg>
+        <span class="brandname">MAZE BANK</span><small>OF LOS SANTOS</small>
+      </div>
+      <p class="side-overline">Digital branch</p>
+      <div class="person"><div class="person-name" id="personName">WELCOME</div><div class="person-id" id="accountNumber">MZ 0000 0000</div></div>
+      <div class="wealth">
+        <p class="overline">Checking</p><strong class="large-money" id="mainBalance">$0</strong>
+        <span class="cash-caption" id="cashCaption">Plus $0 cash on you</span>
+      </div>
+      <div class="scorebox">
+        <p class="overline">Credit score</p>
+        <div class="score-row"><strong class="score" id="creditScore">650</strong><div class="rating"><b id="creditRating">GOOD</b><span id="creditDelta">Your current rating</span></div></div>
+        <div class="scorebar"><div class="score-band"></div><span class="score-pointer" id="scorePointer"></span></div>
+        <div class="score-legend"><span>300</span><span>580</span><span>670</span><span>740</span><span>800</span><span>850</span></div>
+        <svg class="score-spark" viewBox="0 0 450 52" preserveAspectRatio="none" aria-hidden="true"><polyline points="0,46 19,39 36,44 56,31 72,37 90,26 108,30 125,20 144,29 159,16 177,23 195,14 216,21 230,12 246,19 267,13 285,23 305,16 324,20 343,12 359,18 376,10 393,17 412,6 430,14 450,8" stroke="white" fill="none" stroke-width="3"/><circle cx="450" cy="8" r="6" fill="white"/></svg>
+        <span class="last30">Last 30 days</span>
+      </div>
+    </aside>
+    <section class="workspace">
+      <div class="sheet">
+        <header class="topnav"><nav id="tabs" aria-label="Bank sections"></nav><button id="closeBank" class="closebank" aria-label="Close"><kbd>ESC</kbd> CLOSE</button></header>
+        <div class="tab-body" id="tabBody"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ATM browser lives on the prop via DUI. This transparent NUI only provides reader/keypad input. -->
+  <section id="atm" class="atm-overlay hidden">
+    <div class="atm-title"><span>MAZE BANK</span><small>CASH MACHINE</small></div>
+    <div class="atm-right">
+      <button id="reader" class="atm-side-action"><i></i><strong>INSERT CARD</strong></button>
+      <button id="tap" class="atm-side-action tap"><i></i><strong>TAP HERE</strong></button>
+      <div class="atm-terminal" id="atmTerminal">
+        <div class="terminal-head"><span id="terminalTitle">CONTACTLESS</span><button id="terminalExit">✕</button></div>
+        <div id="terminalContents"></div>
+      </div>
+    </div>
+    <footer class="atm-help"><span>SELECT <kbd>1–7</kbd></span><span>BACK <kbd>ESC</kbd></span><span>KEYPAD <kbd>0–9</kbd></span></footer>
+  </section>
+
+  <!-- Developer-only local ATM alignment console. Opened from /w -> Panels, never shown to players. -->
+  <section id="align" class="align-overlay hidden">
+    <div class="align-panel">
+      <header class="align-header">
+        <div class="align-mark">MZ<span> / DEV TOOLS</span></div>
+        <div class="align-header-actions"><button id="alignSide" title="Move editor to the other side" aria-label="Move editor">⇄</button><button id="alignClose" aria-label="Exit alignment">✕</button></div>
+      </header>
+      <div class="align-heading"><small>ATM DISPLAY LAB</small><h2>SCREEN ALIGNMENT</h2>
+        <p>Move the live cyan guide until it sits flush on the ATM glass.</p>
+        <div class="align-model" id="alignModel">SELECT AN ATM</div>
+      </div>
+      <div id="alignControls">
+        <div class="align-step"><span>ADJUSTMENT STEP</span><select id="alignStep"><option value="0.001">Fine · 0.001 m</option><option selected value="0.005">Normal · 0.005 m</option><option value="0.01">Medium · 0.010 m</option><option value="0.025">Coarse · 0.025 m</option></select></div>
+        <div class="align-fields" id="alignFields">
+          <div class="align-field"><label>LEFT / RIGHT <em>A · D</em></label><div><button data-adjust="side:-">−</button><input data-align-field="side" type="number" step="0.001"><button data-adjust="side:+">+</button></div></div>
+          <div class="align-field"><label>IN / OUT <em>W · S</em></label><div><button data-adjust="out:-">−</button><input data-align-field="out" type="number" step="0.001"><button data-adjust="out:+">+</button></div></div>
+          <div class="align-field"><label>DOWN / UP <em>Q · E</em></label><div><button data-adjust="up:-">−</button><input data-align-field="up" type="number" step="0.001"><button data-adjust="up:+">+</button></div></div>
+          <div class="align-field"><label>WIDTH <em>Z · X</em></label><div><button data-adjust="width:-">−</button><input data-align-field="width" type="number" step="0.001"><button data-adjust="width:+">+</button></div></div>
+          <div class="align-field"><label>HEIGHT <em>C · V</em></label><div><button data-adjust="height:-">−</button><input data-align-field="height" type="number" step="0.001"><button data-adjust="height:+">+</button></div></div>
+          <div class="align-field"><label>FACE TILT <em>R · F</em></label><div><button data-adjust="tilt:-">−</button><input data-align-field="tilt" type="number" step="0.001"><button data-adjust="tilt:+">+</button></div></div>
+        </div>
+        <p class="align-hint">Use the <strong>arrow keys</strong> to move the display, <strong>PgUp / PgDn</strong> for depth, and <strong>Enter</strong> to save. Hold a key for continuous movement.</p>
+        <div class="align-actions"><button class="align-primary" id="alignSave">SAVE THIS MODEL</button><button id="alignNext">NEXT ATM</button></div>
+        <div class="align-actions"><button id="alignExport">EXPORT ALL JSON</button><button class="align-danger" id="alignReset">RESET MODEL</button></div>
+        <div class="align-foot" id="alignSaved">0 models saved locally</div>
+      </div>
+      <div id="alignExportPanel" class="hidden">
+        <p class="align-export-help">This JSON includes <strong>every ATM model</strong> and your saved adjustments. Copy it and send it here so the new positions can be added to the script.</p>
+        <textarea id="alignJson" spellcheck="false" readonly></textarea>
+        <div class="align-actions"><button class="align-primary" id="alignCopy">COPY JSON</button><button id="alignDownload">DOWNLOAD .JSON</button></div>
+        <button class="align-back" id="alignBack">← BACK TO ALIGNMENT</button>
+      </div>
+      <div class="align-toast hidden" id="alignToast"></div>
+    </div>
+  </section>
+
+  <div id="modal" class="modal hidden"><div class="modal-panel"><div class="modal-heading"><strong id="modalTitle">BANKING</strong><button id="modalClose" aria-label="Close">×</button></div><div id="modalContents"></div></div></div>
+  <div id="toast" class="toast hidden"></div>
+  <script src="app.js"></script>
+  <script src="align.js"></script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+/* Compact WHIP-native inspired live ATM screen alignment console. */
+.align-overlay{position:fixed;inset:0;z-index:140;pointer-events:none;font-family:Barlow,Arial,sans-serif;color:#f2f3f1}
+.align-panel{position:absolute;right:22px;top:50%;transform:translateY(-50%);width:min(398px,calc(100vw - 44px));max-height:calc(100vh - 32px);overflow-y:auto;scrollbar-width:none;background:#0d1016f5;border:1px solid #313844;border-top:4px solid #be303e;box-shadow:0 22px 70px #000a;border-radius:9px;pointer-events:auto}
+.align-overlay.left .align-panel{right:auto;left:22px}
+.align-panel::-webkit-scrollbar{display:none}
+.align-header{padding:14px 19px 13px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #30343e}
+.align-header-actions{display:flex;gap:7px}
+.align-mark{font:italic 800 24px BC,Impact,sans-serif;letter-spacing:.035em}.align-mark span{font:700 12px Barlow,Arial,sans-serif;letter-spacing:.11em;color:#8e939a}
+.align-header button{width:31px;height:31px;border:1px solid #42464e;border-radius:50%;background:#20242b;color:#e9e8e7;font-size:16px}
+.align-heading{padding:16px 20px 12px}.align-heading small{font-size:10px;letter-spacing:.18em;color:#bb5662;font-weight:800}.align-heading h2{font:italic 800 32px/1 BC,Impact,sans-serif;margin:4px 0 8px}.align-heading p{font-size:13px;color:#9aa2a9;margin:0 0 13px;line-height:1.4}
+.align-model{border-left:3px solid #6dd0c6;background:#19222a;color:#b4f3e9;font:700 14px monospace;padding:10px 12px;border-radius:2px}
+.align-step{margin:0 20px 11px;display:flex;gap:8px;justify-content:space-between;align-items:center}.align-step span{color:#9da1a6;font:700 10px Barlow;letter-spacing:.12em}.align-step select{max-width:190px;background:#191e26;color:#f1f1ef;border:1px solid #353d49;padding:8px;font-size:12px;border-radius:3px}
+.align-fields{padding:0 20px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px 11px}
+.align-field label{font:800 11px Barlow;color:#c6cbd0;display:flex;justify-content:space-between;gap:4px;margin-bottom:5px}.align-field label em{font-size:9px;color:#8a949c;font-style:normal}
+.align-field>div{display:grid;grid-template-columns:30px minmax(0,1fr) 30px;height:36px}.align-field button{border:1px solid #404753;background:#2a3038;color:#fff;font:800 19px BC;line-height:1;min-width:0;padding:0}.align-field button:hover{background:#b83241}.align-field input{background:#11161c;color:#e9f5ef;border:1px solid #414853;border-left:0;border-right:0;text-align:center;min-width:0;width:100%;font:700 14px monospace;padding:3px 0}.align-field input::-webkit-inner-spin-button,.align-field input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}.align-field input[type=number]{-moz-appearance:textfield}
+.align-hint{margin:13px 20px;color:#969da5;font-size:12px;line-height:1.5}.align-hint strong{color:#e5e8ec}
+.align-actions{padding:0 20px;display:flex;gap:8px;margin:7px 0}.align-actions button{height:39px;flex:1;background:#292e36;color:#f5f5f3;border:1px solid #454953;border-radius:3px;font:italic 800 14px BC,Impact,sans-serif;letter-spacing:.03em}.align-actions button:hover{filter:brightness(1.3)}.align-actions .align-primary{background:#c13240;border-color:#c13240;color:#fff}.align-actions .align-danger{background:#251a1e;border-color:#74414a;color:#eab4bc}
+.align-foot{margin:13px 20px 17px;border-top:1px solid #353b43;padding-top:10px;color:#71cfb6;text-align:center;font-size:12px}
+.align-export-help{margin:6px 20px 13px;color:#b5bcc4;font-size:13px;line-height:1.5}.align-export-help strong{color:#f7f7f7}.align-overlay textarea{display:block;margin:0 20px 13px;width:calc(100% - 40px);height:min(49vh,365px);resize:none;border:1px solid #464f5b;background:#090c10;color:#b0eaca;font:12px/1.45 monospace;border-radius:4px;padding:12px;word-break:break-word}
+.align-back{margin:14px 20px 22px;border:0;background:transparent;color:#b5bdc7;font:800 12px Barlow;cursor:pointer}.align-back:hover{color:#fff}
+.align-toast{position:absolute;top:55px;left:14px;right:14px;background:#174634;color:#d7ffe5;border:1px solid #448e65;border-radius:4px;padding:10px 12px;text-align:center;font-size:12px;box-shadow:0 8px 20px #0007}
+@media(max-height:760px){.align-panel{top:8px;transform:none}.align-heading{padding-top:9px}.align-field>div{height:31px}.align-fields{gap:7px}.align-hint{margin-top:8px;margin-bottom:8px}}

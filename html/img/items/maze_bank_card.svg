@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 430" width="640" height="430">
+  <defs>
+    <linearGradient id="red" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d7444f"/><stop offset="0.54" stop-color="#bb2935"/><stop offset="1" stop-color="#601b28"/></linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffedb2"/><stop offset="1" stop-color="#c18e4d"/></linearGradient>
+  </defs>
+  <rect x="21" y="18" rx="28" width="597" height="392" fill="url(#red)" stroke="#73222d" stroke-width="3"/>
+  <g opacity="0.1" fill="none" stroke="#fff" stroke-width="9" transform="translate(365,-20) rotate(30)">
+    <rect x="0" y="0" width="250" height="440" rx="35"/><rect x="35" y="35" width="180" height="370" rx="10"/><rect x="75" y="75" width="100" height="290"/>
+  </g>
+  <g fill="none" stroke="white" stroke-width="8" transform="translate(64,58)"><rect width="10" height="55" x="0"/><rect width="17" height="55" x="25"/><rect width="12" height="55" x="57"/><path d="M0 68h70"/></g>
+  <text x="66" y="157" font-family="Arial,sans-serif" font-size="31" letter-spacing="1" fill="white">MAZE BANK</text>
+  <text x="69" y="172" font-family="Arial,sans-serif" font-size="8" letter-spacing="4" fill="#fff">OF LOS SANTOS</text>
+  <rect x="65" y="201" width="83" height="58" rx="10" fill="url(#gold)" stroke="#bc974c" stroke-width="3"/>
+  <g stroke="#c39b59" stroke-width="3" fill="none"><rect x="84" y="212" width="42" height="37" rx="7"/><path d="M65 222h19M65 239h19M126 222h22M126 239h22M104 201v11M104 249v10"/></g>
+  <g stroke="#ffffff" stroke-width="6" fill="none" stroke-linecap="round"><path d="M522 72q36 26 0 53M508 81q23 18 0 35M494 91q12 8 0 16"/></g>
+  <text x="66" y="322" font-family="Arial,sans-serif" font-size="32" letter-spacing="9" fill="white">5500  ••••  ••••  0212</text>
+  <text x="68" y="372" font-family="Arial,sans-serif" font-size="16" letter-spacing="3" fill="#fcebed">EVERYDAY DEBIT</text>
+  <text x="526" y="376" font-family="Arial,sans-serif" font-size="20" font-weight="bold" font-style="italic" fill="white">MAZE</text>
+</svg>
