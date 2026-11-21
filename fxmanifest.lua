@@ -4,7 +4,7 @@ lua54 'yes'
 
 author 'Lunny Dev'
 description 'WHIP Banking — Fleeca, Maze Bank and Pacific Standard, cards, teller and DUI ATMs'
-version '2.8.0'
+version '2.8.1'
 
 dependency 'whip_core'
 dependency 'oxmysql'

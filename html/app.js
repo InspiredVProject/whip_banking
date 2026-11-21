@@ -76,11 +76,11 @@
     bankSelectionContent.innerHTML=`<header class="choice-header"><div><small>${switchingBanks?'SWITCH BANK':'NEW CUSTOMER'}</small><h1>YOUR ${b.short} CARD</h1><p>Pick your card finish and choose a secure four-digit PIN.</p></div><button data-choice-back>ESC&nbsp; BACK</button></header>
       <div class="choice-design"><div class="choice-design-preview"><div class="premium-showcase"><div><div class="premium-side-label">FRONT</div>${cardArtwork(key,cardStyle,{holder:data?.name||'YOUR NAME'})}</div><div><div class="premium-side-label">BACK</div>${cardArtwork(key,cardStyle,{holder:data?.name||'YOUR NAME'},true)}</div></div>
           <p>Preview only — your personalised number and expiry are assigned when the physical card is issued. Cards can be frozen, replaced or cancelled at a branch.</p></div>
-        <div class="choice-design-form"><h2>CUSTOMISE YOUR CARD</h2><p>FINISH</p><div class="choice-finishes">
-        ${Object.entries(CARD_STYLE_NAMES).map(([k,v])=>`<button data-card-style="${k}" class="${cardStyle===k?'selected':''}">${v}</button>`).join('')}
-        </div><label>YOUR SECURE FOUR-DIGIT PIN<input id="choicePin" type="password" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" placeholder="••••" autocomplete="off"></label>
+        <form id="choiceBankForm" class="choice-design-form" autocomplete="off"><h2>CUSTOMISE YOUR CARD</h2><p>FINISH</p><div class="choice-finishes">
+        ${Object.entries(CARD_STYLE_NAMES).map(([k,v])=>`<button type="button" data-card-style="${k}" class="${cardStyle===k?'selected':''}">${v}</button>`).join('')}
+        </div><label>YOUR SECURE FOUR-DIGIT PIN<input id="choicePin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" placeholder="••••" autocomplete="new-password" required></label>
         <div class="choice-disclaimer">${switchingBanks?'Switching replaces your existing bank cards.':'Your account and card are linked to your character.'} Savings and loans always use WHIP Core.</div>
-        <button class="choice-pick" id="confirmBankChoice">${switchingBanks?'SWITCH TO':'OPEN WITH'} ${b.short} <span>ENTER ↗</span></button></div></div>`;
+        <button type="submit" class="choice-pick" id="confirmBankChoice">${switchingBanks?'SWITCH TO':'OPEN WITH'} ${b.short} <span>ENTER ↗</span></button></form></div>`;
   }
   bankSelection.addEventListener('click',async event=>{
     const el=event.target.closest('button');if(!el)return;
@@ -88,6 +88,7 @@
     if(el.dataset.selectBank){showCardChoice(el.dataset.selectBank);return;}
     if(el.dataset.cardStyle){cardStyle=el.dataset.cardStyle;const pin=$('#choicePin')?.value||'';showCardChoice(bankChoice);if($('#choicePin'))$('#choicePin').value=pin;return;}
     if(el.id==='confirmBankChoice'){
+      event.preventDefault(); // Prevent Chromium from submitting/reloading the FiveM NUI.
       const pin=$('#choicePin')?.value||'';
       if(!/^\d{4}$/.test(pin)){say('Choose a four-digit PIN',true);return;}
       el.disabled=true;
@@ -97,6 +98,14 @@
       if(updated.ok&&updated.data){bankSelection.classList.add('hidden');openBank(updated.data,true);say('Welcome to '+BRANDS[bankChoice].name);}
       else{say('Your bank choice was saved. Please reopen the teller.',true);bankSelection.classList.add('hidden');post('close');}
     }
+  });
+  // The bank-choice PIN is a genuine HTML form control. Always handle submits
+  // in-app so Chromium never navigates the NUI and drops the current session.
+  bankSelection.addEventListener('submit',event=>{
+    if(event.target.id!=='choiceBankForm')return;
+    event.preventDefault();
+    const confirm=event.target.querySelector('#confirmBankChoice');
+    if(confirm && !confirm.disabled)confirm.click();
   });
   const tabs = ['accounts','transfer','history','cards','credit','loans','bills','scheduled','bank'];
   const esc = str => String(str ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
