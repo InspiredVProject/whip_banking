@@ -2,9 +2,102 @@
   'use strict';
   const $ = s => document.querySelector(s);
   const bank = $('#bank'), atm = $('#atm'), modal = $('#modal'), toast = $('#toast');
+  const bankSelection = $('#bankSelection'), bankSelectionContent = $('#bankSelectionContent');
+  const cardViewer = $('#cardViewer'), cardViewerStage=$('#cardViewerStage');
+  let previewCard=null;
   let data = null, activeTab = 'accounts', fromTeller = false, screen = 'idle';
   let atmData = null, chosenCard = null, activeCard = null, atmMessage = '';
+  let pinDigits='', amountDigits='', insertingCard=false, insertSequence=0, keypadCoords=null, keypadModeSent=false, processingCash=false;
+  let keypadDebug=false; // Only toggled for a /w developer test session.
+  const keypadLayer=$('#atmPhysicalKeypad');
+  let pinBuffer = '', pinBusy = false;
   const preview = new URLSearchParams(location.search).has('preview');
+  const BRANDS = {
+    fleeca:{name:'FLEECA BANK',tag:'THE NEIGHBOURHOOD BANK',short:'FLEECA',description:'Everyday banking with the green bank.',
+      colour:'#2b985c'},
+    maze:{name:'MAZE BANK',tag:'OF LOS SANTOS',short:'MAZE',description:'The city bank for every ambition.',
+      colour:'#c52e37'},
+    pacific:{name:'PACIFIC STANDARD',tag:'PUBLIC DEPOSIT BANK',short:'PACIFIC',description:'A premium standard of banking.',
+      colour:'#214d83'}
+  };
+  let bankChoice = 'fleeca', cardStyle = 'classic', switchingBanks = false;
+  const brand = () => BRANDS[data?.bankKey] || BRANDS.maze;
+  const bankName = () => brand().name;
+  const CARD_STYLE_NAMES={classic:'EVERYDAY',black:'CASH+',metal:'METAL'};
+  const chipSvg=`<svg viewBox="0 0 94 68" aria-hidden="true" focusable="false"><rect x="2" y="2" width="90" height="64" rx="11" fill="url(#chipg)" stroke="#9f7d44" stroke-width="2"/><defs><linearGradient id="chipg" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#fff0c5"/><stop offset=".5" stop-color="#d7b878"/><stop offset="1" stop-color="#b18c49"/></linearGradient></defs><path d="M21 2v15h15l11 10v14L36 51H21v15M73 2v15H58L47 27v14l11 10h15v15M2 24h21l13 10-13 10H2M92 24H71L58 34l13 10h21M36 2v15M58 2v15M36 51v15M58 51v15" stroke="#9f7b41" stroke-width="2" fill="none"/></svg>`;
+  const tapSvg=`<svg viewBox="0 0 50 50" aria-label="Contactless" role="img"><path d="M8 16q16 10 0 20M17 10q24 16 0 32M26 4q32 22 0 44" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>`;
+  function cardArtwork(bankKey,style,info={},reverse=false){
+    const k=BRANDS[bankKey]?bankKey:'maze', b=BRANDS[k], tier=CARD_STYLE_NAMES[style]||'EVERYDAY', cardLogo=k==='maze'?'MAZE BANK':b.short;
+    const holder=esc(String(info.holder||'CARDHOLDER NAME').toUpperCase().slice(0,32));
+    const last4=esc(String(info.last4||'••••').slice(-4));
+    const expires=esc(info.expires||'MM/YY');
+    const identifier=esc(String(info.id||'').slice(0,12));
+    const cardClass=`premium-card bankcard card-${k} card-${style||'classic'}${reverse?' premium-reverse':''}`;
+    if(reverse) return `<div class="${cardClass}" aria-label="Reverse of ${esc(b.name)} ${esc(tier)} card">
+      <div class="premium-backtop">${esc(b.name)} <small>CONTACTLESS DEBIT</small></div><div class="premium-stripe"></div>
+      <div class="premium-signature"><span>${holder}</span><b>CVV •••</b></div>
+      <div class="premium-backnote">This card remains the property of ${esc(b.name)}. If found, return to any bank branch. Your PIN must never be written on this card.</div>
+      <div class="premium-backfooter"><span>24/7 BANKING SERVICES</span><b>LS PAY</b></div></div>`;
+    return `<div class="${cardClass}" aria-label="${esc(b.name)} ${esc(tier)} debit card ending ${last4}">
+      <div class="premium-foil"></div><div class="premium-head"><div class="premium-brand"><strong>${esc(cardLogo)}</strong><span>${esc(b.tag)}</span></div><div class="premium-edition"><small>DEBIT</small><b>${esc(tier)}</b></div></div>
+      <div class="premium-chip-row"><span class="premium-chip">${chipSvg}</span><span class="premium-contactless">${tapSvg}</span></div>
+      <div class="premium-number">•••• &nbsp;•••• &nbsp;•••• &nbsp;${last4}</div>
+      <div class="premium-details"><span class="premium-holder"><small>CARDHOLDER</small><strong>${holder}</strong></span><span class="premium-expiry"><small>VALID THRU</small><strong>${expires}</strong></span><span class="premium-network">LS<span>PAY</span></span></div>
+      ${identifier?`<span class="premium-tinyid">${identifier}</span>`:''}</div>`;
+  }
+  function applyBankTheme(key){
+    const k=BRANDS[key]?key:'maze';
+    bank.dataset.bank=k;atm.dataset.bank=k;modal.dataset.bank=k;
+    $('#bank .brandname').textContent=BRANDS[k].name;
+    $('#bank .logo small').textContent=BRANDS[k].tag;
+    $('#atm .atm-title span').textContent=BRANDS[k].name;
+  }
+  function bankChoiceCard(key){
+    const b=BRANDS[key]; const offer=(data?.bankOptions||[]).find(x=>x.key===key)||{};
+    return `<article class="choice-bank choice-${key}">
+      <div class="choice-top"><div class="choice-logo">${b.short}</div><small>${b.tag}</small></div>
+      <p>${b.description}</p><div class="choice-card-preview-wrap">${cardArtwork(key,'classic',{holder:'YOUR NAME'})}</div>
+      <div class="choice-offers"><strong>${Number(offer.savingsApr??0).toFixed(1)}% APR</strong><span>on eligible savings</span>
+      <strong>${money(offer.atmDailyLimit??5000)}</strong><span>ATM cash per day</span></div>
+      <button class="choice-pick" data-select-bank="${key}">CHOOSE ${b.short} <span>↗</span></button>
+    </article>`;
+  }
+  function showChoice(shouldSwitch=false){
+    if(!fromTeller && !preview){say('Visit a bank teller to change banks',true);return;}
+    switchingBanks=shouldSwitch; bankChoice=(data?.bankKey&&shouldSwitch)?data.bankKey:'fleeca';cardStyle='classic';
+    bank.classList.add('hidden');modal.classList.add('hidden');bankSelection.classList.remove('hidden');
+    bankSelectionContent.innerHTML=`<header class="choice-header"><div><small>WELCOME TO YOUR BANKING FUTURE</small><h1>${shouldSwitch?'SWITCH BANK':'CHOOSE YOUR BANK'}</h1><p>${shouldSwitch?'Your WHIP balances, savings and loans stay with you. Existing debit cards will be cancelled and replaced.':'Choose the bank that fits you. Your choice follows your character across branches, ATMs and your phone.'}</p></div><button data-choice-back>ESC&nbsp; BACK</button></header>
+      <div class="choice-grid">${['fleeca','maze','pacific'].map(bankChoiceCard).join('')}</div>`;
+  }
+  function showCardChoice(key){
+    if(!BRANDS[key])return;
+    bankChoice=key;
+    const b=BRANDS[key];
+    bankSelectionContent.innerHTML=`<header class="choice-header"><div><small>${switchingBanks?'SWITCH BANK':'NEW CUSTOMER'}</small><h1>YOUR ${b.short} CARD</h1><p>Pick your card finish and choose a secure four-digit PIN.</p></div><button data-choice-back>ESC&nbsp; BACK</button></header>
+      <div class="choice-design"><div class="choice-design-preview"><div class="premium-showcase"><div><div class="premium-side-label">FRONT</div>${cardArtwork(key,cardStyle,{holder:data?.name||'YOUR NAME'})}</div><div><div class="premium-side-label">BACK</div>${cardArtwork(key,cardStyle,{holder:data?.name||'YOUR NAME'},true)}</div></div>
+          <p>Preview only — your personalised number and expiry are assigned when the physical card is issued. Cards can be frozen, replaced or cancelled at a branch.</p></div>
+        <div class="choice-design-form"><h2>CUSTOMISE YOUR CARD</h2><p>FINISH</p><div class="choice-finishes">
+        ${Object.entries(CARD_STYLE_NAMES).map(([k,v])=>`<button data-card-style="${k}" class="${cardStyle===k?'selected':''}">${v}</button>`).join('')}
+        </div><label>YOUR SECURE FOUR-DIGIT PIN<input id="choicePin" type="password" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" placeholder="••••" autocomplete="off"></label>
+        <div class="choice-disclaimer">${switchingBanks?'Switching replaces your existing bank cards.':'Your account and card are linked to your character.'} Savings and loans always use WHIP Core.</div>
+        <button class="choice-pick" id="confirmBankChoice">${switchingBanks?'SWITCH TO':'OPEN WITH'} ${b.short} <span>ENTER ↗</span></button></div></div>`;
+  }
+  bankSelection.addEventListener('click',async event=>{
+    const el=event.target.closest('button');if(!el)return;
+    if(el.matches('[data-choice-back]')){if(bankSelectionContent.querySelector('.choice-design'))showChoice(switchingBanks);else{bankSelection.classList.add('hidden');if(data?.bankKey){bank.classList.remove('hidden');draw();}else post('close');}return;}
+    if(el.dataset.selectBank){showCardChoice(el.dataset.selectBank);return;}
+    if(el.dataset.cardStyle){cardStyle=el.dataset.cardStyle;const pin=$('#choicePin')?.value||'';showCardChoice(bankChoice);if($('#choicePin'))$('#choicePin').value=pin;return;}
+    if(el.id==='confirmBankChoice'){
+      const pin=$('#choicePin')?.value||'';
+      if(!/^\d{4}$/.test(pin)){say('Choose a four-digit PIN',true);return;}
+      el.disabled=true;
+      const result=await post('request',{action:'selectBank',args:[bankChoice,pin,cardStyle]});
+      if(!result.ok){say(result.error||'Bank choice refused',true);el.disabled=false;return;}
+      const updated=await post('refresh');
+      if(updated.ok&&updated.data){bankSelection.classList.add('hidden');openBank(updated.data,true);say('Welcome to '+BRANDS[bankChoice].name);}
+      else{say('Your bank choice was saved. Please reopen the teller.',true);bankSelection.classList.add('hidden');post('close');}
+    }
+  });
   const tabs = ['accounts','transfer','history','cards','credit','loans','bills','scheduled','bank'];
   const esc = str => String(str ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const currency = () => data?.currency || atmData?.currency || '$';
@@ -57,23 +150,27 @@
   }
   async function refresh() {
     const result=await post('refresh');
-    if(result.ok && result.data){data=result.data;draw();}
+    if(result.ok && result.data){data=result.data;applyBankTheme(data.bankKey);draw();}
   }
   function openBank(payload,teller=false) {
     data=payload;fromTeller=!!teller;activeTab='accounts';
-    atm.classList.add('hidden');bank.classList.remove('hidden');modal.classList.add('hidden');draw();
-    if(fromTeller) showModal('WELCOME TO MAZE BANK',`<p style="font-size:17px;margin:0 0 16px">Good afternoon. What can I help you with today?</p>
+    cardViewer.classList.add('hidden');
+    atm.classList.add('hidden');modal.classList.add('hidden');
+    applyBankTheme(data?.bankKey);
+    if(fromTeller && !data.bankKey){showChoice(false);return;}
+    bankSelection.classList.add('hidden');bank.classList.remove('hidden');draw();
+    if(fromTeller) showModal('WELCOME TO '+bankName(),`<p style="font-size:17px;margin:0 0 16px">Good afternoon. What can I help you with today?</p>
       <div class="form-grid one"><button class="button red" data-teller-tab="accounts">CHECK MY ACCOUNTS</button>
       <button class="button" data-teller-tab="cards">BANK CARDS & PIN SERVICES</button>
       <button class="button" data-teller-tab="loans">DISCUSS A LOAN</button>
       <button class="button" data-teller-tab="transfer">SEND A BANK TRANSFER</button></div>`,null);
   }
-  function closeBank() {bank.classList.add('hidden');modal.classList.add('hidden');post('close');}
+  function closeBank() {bank.classList.add('hidden');bankSelection.classList.add('hidden');modal.classList.add('hidden');post('close');}
   function primary() {return data?.accounts?.find(a=>a.accountId===data.primary)||data?.accounts?.[0]||{};}
 
   function renderSidebar() {
     $('#personName').textContent=data?.name||'YOUR ACCOUNTS';
-    $('#accountNumber').textContent=primary().accountNumber||'MAZE BANK';
+    $('#accountNumber').textContent=primary().accountNumber||bankName();
     $('#mainBalance').textContent=money(data?.balance||0);
     $('#cashCaption').textContent='Plus '+money(data?.cash)+' cash on you';
     const n=Number(data?.credit||650), rating=n<580?'POOR':n<670?'FAIR':n<740?'GOOD':n<800?'VERY GOOD':'EXCELLENT';
@@ -152,14 +249,17 @@
       ${list.map(t=>{const minus=t.type==='withdraw'||t.type==='transfer_out'||(t.type==='transfer'&&Number(t.fromAccountId)===Number(data.primary));return `<tr><td>${shortDate(t.createdAt||t.timestamp)}</td><td>${esc(t.message||'Bank movement')}</td><td>${esc(t.type||'transfer')}</td><td class="number ${minus?'negative':'positive'}">${minus?'-':'+'}${money(Math.abs(t.amount))}</td></tr>`}).join('')||'<tr><td colspan="4" class="muted">No transactions recorded yet</td></tr>'}</tbody></table></div>`;
   }
   function cardsPage() {
-    return `<div class="page-head"><h2 class="title-condensed">YOUR CARDS</h2><button class="button red" data-do="newCard">ISSUE NEW CARD</button></div><p class="page-intro">Physical contactless cards, four-digit PINs and immediate freeze controls. Bring your card to an ATM.</p>
-      <div class="cards-grid">${(data?.cards||[]).map(c=>`<div><div class="bankcard"><div class="card-head"><span>MAZE BANK</span><span>)))</span></div><span class="card-chip"></span><div class="card-number">•••• •••• •••• ${esc(c.last4)}</div><div class="card-bottom"><span>${esc(data?.name||'CARD HOLDER').toUpperCase()}</span><b>DEBIT</b></div></div>
-      <div class="card-controls"><span class="pill ${c.status==='active'?'active':''}">${esc(c.status.toUpperCase())}</span>
-      ${c.status!=='cancelled'?`<button class="smallbtn" data-card-toggle="${c.id}" data-status="${c.status==='active'?'frozen':'active'}">${c.status==='active'?'FREEZE':'UNFREEZE'}</button><button class="smallbtn" data-card-pin="${c.id}">CHANGE PIN</button><button class="smallbtn" data-card-toggle="${c.id}" data-status="cancelled">CANCEL</button>`:''}</div></div>`).join('')||'<div class="empty">No cards issued. Speak to a teller to get a physical card.</div>'}</div>`;
+    return `<div class="page-head"><h2 class="title-condensed">YOUR DEBIT CARDS</h2><button class="button red" data-do="newCard">ISSUE NEW CARD</button></div><p class="page-intro">Your personalised physical cards, all connected to real WHIP bank accounts. Tap to see the reverse, change PIN or freeze a card instantly.</p>
+      <div class="cards-grid premium-card-list">${(data?.cards||[]).map(c=>`<div class="premium-card-entry">
+        <div class="premium-faces"><div class="premium-face-front">${cardArtwork(c.bankKey,c.cardStyle,{holder:data?.name||'CARDHOLDER',last4:c.last4,expires:c.expires,id:c.id})}</div>
+        <div class="premium-face-back hidden">${cardArtwork(c.bankKey,c.cardStyle,{holder:data?.name||'CARDHOLDER',last4:c.last4,expires:c.expires,id:c.id},true)}</div></div>
+        <div class="premium-verified"><span>● ${esc((BRANDS[c.bankKey]||BRANDS.maze).name)} · ${esc(CARD_STYLE_NAMES[c.cardStyle]||'EVERYDAY')}</span><span>•••• ${esc(c.last4)}</span></div>
+        <div class="card-controls"><span class="pill ${c.status==='active'?'active':''}">${esc(c.status.toUpperCase())}</span><button class="smallbtn" data-flip-card="${c.id}">VIEW BACK</button>
+        ${c.status!=='cancelled'?`<button class="smallbtn" data-card-toggle="${c.id}" data-status="${c.status==='active'?'frozen':'active'}">${c.status==='active'?'FREEZE':'UNFREEZE'}</button><button class="smallbtn" data-card-pin="${c.id}">CHANGE PIN</button><button class="smallbtn" data-card-toggle="${c.id}" data-status="cancelled">CANCEL</button>`:''}</div></div>`).join('')||'<div class="empty">No cards issued. Speak to a teller to get a personalised physical bank card.</div>'}</div>`;
   }
   function creditPage() {
     const n=data?.credit||650;
-    return `<div class="page-head"><h2 class="title-condensed">CREDIT PROFILE</h2></div><div class="credit-layout"><section class="panel"><div class="smallgray">Your Maze credit score</div><div class="score-large">${n}</div><div class="score-track"><i style="left:${(n-300)/550*100}%"></i></div><div class="smallgray">300 — Poor &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 670 — Good &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 850 — Excellent</div></section>
+    return `<div class="page-head"><h2 class="title-condensed">CREDIT PROFILE</h2></div><div class="credit-layout"><section class="panel"><div class="smallgray">Your ${esc(bankName())} credit score</div><div class="score-large">${n}</div><div class="score-track"><i style="left:${(n-300)/550*100}%"></i></div><div class="smallgray">300 — Poor &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 670 — Good &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 850 — Excellent</div></section>
       <section class="panel"><h3>How credit works</h3><p>Scores start at ${data?.credit===undefined?650:650}. Timely loan repayments improve your score. Missed repayments reduce it.</p>
       <p>Higher scores unlock better borrowing products. Your score and eligibility are checked by the server whenever you apply.</p><button class="button red" data-tab="loans">VIEW LOANS</button></section></div>`;
   }
@@ -180,8 +280,13 @@
       <div class="panel"><h3>Existing standing orders</h3><table class="data-table"><thead><tr><th>Payment</th><th>Amount</th><th>Next payment</th><th>Status</th><th></th></tr></thead><tbody>${(data?.schedules||[]).map(s=>`<tr><td>${esc(s.label)}<small style="display:block;color:#777">Every ${s.days} days</small></td><td>${money(s.amount)}</td><td>${shortDate(s.nextAt)}</td><td><span class="pill ${s.status==='active'?'active':''}">${esc(s.status)}</span></td><td>${s.status==='active'?`<button class="smallbtn" data-cancel="${s.id}">CANCEL</button>`:''}</td></tr>`).join('')||'<tr><td colspan="5">No standing orders.</td></tr>'}</tbody></table></div>`;
   }
   function bankPage() {
-    return `<div class="page-head"><h2 class="title-condensed">YOUR DIGITAL BRANCH</h2></div><div class="panel"><h3>Welcome to Maze Bank</h3><p>Manage your money, cards, savings, scheduled transfers, bills, credit and loans in one place.</p><div class="form-actions"><button class="button red" data-tab="accounts">MY ACCOUNTS</button><button class="button ghost" data-tab="cards">BANK CARDS</button></div></div>
-      <div class="panel"><h3>Visit us in person</h3><p>Our branch tellers can issue new debit cards and help with your account. At any city ATM, insert or tap a physical card and enter the four-digit PIN.</p><p>Eight public branch counters are available. All four standard GTA V ATM models are supported.</p></div>`;
+    const b=brand();
+    return `<div class="page-head"><h2 class="title-condensed">YOUR DIGITAL BRANCH</h2></div>
+      <div class="panel"><h3>WELCOME TO ${esc(b.name)}</h3><p>Your checking and savings balances, transfers, loans and bills all use WHIP Core.</p>
+      <div class="form-actions"><button class="button red" data-tab="accounts">MY ACCOUNTS</button><button class="button ghost" data-tab="cards">BANK CARDS</button></div></div>
+      <div class="panel"><h3>BANK MEMBERSHIP</h3><p>Current bank: <b>${esc(b.name)}</b>. Savings APR: <b>${Number(data?.bank?.savingsApr||0).toFixed(1)}%</b>. ATM withdrawal cap: <b>${money(data?.bank?.atmDailyLimit||5000)}</b> per day.</p>
+      ${fromTeller&&data?.bankSwitching?'<button class="button red" data-do="switchBank">COMPARE & SWITCH BANK</button>':
+      '<p>To change banks, visit any bank teller. Your money stays in your existing WHIP accounts.</p>'}</div>`;
   }
   function draw() {
     if(!data)return;
@@ -205,7 +310,7 @@
   function cardModal() {
     showModal('ISSUE DEBIT CARD',`<form class="form-grid"><p style="margin:0">A bank teller must issue the card. The physical item will go into your WHIP inventory.</p>
       <div class="field"><label>Link to account</label><select name="account">${choose(data.accounts,data.primary)}</select></div><div class="field"><label>Choose four-digit PIN</label><input name="pin" type="password" inputmode="numeric" minlength="4" maxlength="4" pattern="[0-9]{4}" required></div>
-      <button class="button red" type="submit">ISSUE PHYSICAL CARD</button></form>`,f=>run('issueCard',[Number(f.account),f.pin],'Card issued to your inventory'));
+      <div class="field"><label>Card style</label><select name="style"><option value="classic">Everyday</option><option value="black">Cash+</option><option value="metal">Metal</option></select></div><button class="button red" type="submit">ISSUE PHYSICAL CARD</button></form>`,f=>run('issueCard',[Number(f.account),f.pin,f.style],'Card issued to your inventory'));
   }
   function pinModal(id) {
     showModal('CHANGE CARD PIN',`<form class="form-grid"><div class="field"><label>Current PIN</label><input name="old" type="password" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" required></div>
@@ -244,9 +349,17 @@
   $('#tabBody').addEventListener('click',async e=>{
     const t=e.target.closest('button');if(!t)return;
     if(t.dataset.tab){activeTab=t.dataset.tab;draw();return;}
+    if(t.dataset.flipCard){
+      const card=t.closest('.premium-card-entry');
+      if(card){const front=card.querySelector('.premium-face-front'),back=card.querySelector('.premium-face-back');
+        front.classList.toggle('hidden');back.classList.toggle('hidden');
+        t.textContent=back.classList.contains('hidden')?'VIEW BACK':'VIEW FRONT';}
+      return;
+    }
     const action=t.dataset.do;
     if(action==='savings'||action==='shared')accountModal(action);
     if(action==='newCard')cardModal();
+    if(action==='switchBank')showChoice(true);
     if(t.dataset.cardPin)pinModal(Number(t.dataset.cardPin));
     if(t.dataset.cardToggle){
       const go=()=>run('cardStatus',[Number(t.dataset.cardToggle),t.dataset.status],'Card updated');
@@ -273,113 +386,272 @@
     if(button){activeTab=button.dataset.tellerTab;modal.classList.add('hidden');draw();}
   });
 
-  // ---------- Physical ATM reader and keypad ----------
+  // ---------- Minimal physical card preview from inventory (no banking actions) ----------
+  function openCardPreview(card){
+    if(!card || !BRANDS[card.bankKey])return;
+    previewCard=card;
+    modal.classList.add('hidden');bank.classList.add('hidden');
+    bankSelection.classList.add('hidden');atm.classList.add('hidden');
+    cardViewer.dataset.bank=card.bankKey;
+    $('#cardViewerFront').innerHTML=cardArtwork(card.bankKey,card.cardStyle,
+      {holder:card.holder,last4:card.last4,expires:card.expires,id:card.id});
+    $('#cardViewerBack').innerHTML=cardArtwork(card.bankKey,card.cardStyle,
+      {holder:card.holder,last4:card.last4,expires:card.expires,id:card.id},true);
+    cardViewerStage.classList.remove('flipped');
+    updateCardViewerFlip();
+    cardViewer.classList.remove('hidden');
+  }
+  function updateCardViewerFlip(){
+    const reversed=cardViewerStage.classList.contains('flipped');
+    $('#cardViewerFlip').setAttribute('aria-pressed',String(reversed));
+    cardViewerStage.setAttribute('aria-label',reversed?'View front of bank card':'View back of bank card');
+  }
+  function flipCardPreview(){
+    if(cardViewer.classList.contains('hidden'))return;
+    cardViewerStage.classList.toggle('flipped');updateCardViewerFlip();
+  }
+  function closeCardPreview(){
+    cardViewer.classList.add('hidden');previewCard=null;post('close');
+  }
+  $('#cardViewerFlip').addEventListener('click',flipCardPreview);
+  cardViewerStage.addEventListener('click',flipCardPreview);
+  cardViewerStage.addEventListener('keydown',e=>{
+    if(e.key==='Enter'||e.key===' '){e.preventDefault();flipCardPreview();}
+  });
+
+  // ---------- Real ATM controls: the hardware, not a floating PIN menu ----------
   const terminal = $('#terminalContents');
+  const hardwareSteps=new Set(['pin','menu','fast','amount','balance','complete','error']);
+  const hardwareCurrent=()=>hardwareSteps.has(screen) && !atm.classList.contains('hidden');
+  function setHardwareListening(active){
+    if(keypadModeSent===active)return;
+    keypadModeSent=active;
+    post('atmKeypadMode',{active});
+  }
   function atmFrame(next,extra={}) {
     screen=next;
-    post('atmFrame',{screen,brand:atmData?.brand||'MAZE BANK',currency:currency(),
+    setHardwareListening(hardwareSteps.has(next));
+    // This player sees the brand of THEIR character's account at any machine.
+    const bkey=atmData?.customerBankKey||atmData?.bankKey||'maze';
+    const b=BRANDS[bkey]||BRANDS.maze;
+    post('atmFrame',{screen,bankKey:bkey,brand:b.name,currency:currency(),
       last4:(activeCard||chosenCard)?.last4,name:atmData?.name,
       balance:activeCard?.balance,cash:activeCard?.cash,...extra});
+    updateKeypadLayer();
   }
-  function atmMenu() {
-    $('#terminalTitle').textContent='ATM MENU';
-    terminal.innerHTML='<p>Use the keys for the options displayed on the cash machine.</p><div class="atm-keyset"><button data-atm-choice="fast">1 — FAST CASH</button><button data-atm-choice="withdraw">2 — WITHDRAW</button><button data-atm-choice="balance">3 — BALANCE</button><button data-atm-choice="finish">CANCEL</button></div>';
-    atmFrame('menu');
+  function atmMenu(){
+    terminal.innerHTML='';atmFrame('menu');
   }
-  function atmCardSelector() {
-    $('#terminalTitle').textContent='SELECT BANK CARD';
+  function atmCardSelector(){
+    pinDigits='';insertingCard=false;amountDigits='';chosenCard=null;
+    $('#terminalTitle').textContent='CHOOSE BANK CARD';
     const cards=(atmData?.cards||[]).filter(c=>c.status==='active');
-    terminal.innerHTML=cards.length?`<p>Select the card you are inserting or tapping.</p><div class="atm-keyset">${cards.map(c=>`<button data-atm-card="${c.id}" style="width:100%">${esc(c.label||'Debit')} · •••• ${esc(c.last4)}</button>`).join('')}</div>`:
-      '<p>No active debit card. Visit a branch teller to get one.</p>';
+    terminal.innerHTML=cards.length?`<p>Choose a physical debit card to insert.</p><div class="atm-keyset">${cards.map(c=>`<button data-atm-card="${c.id}" style="width:100%">${esc(c.label||'Debit')} · •••• ${esc(c.last4)}</button>`).join('')}</div>`:
+      '<p>No active debit card. Visit a bank teller to obtain one.</p>';
     atmFrame('idle');
   }
-  function atmPin(id) {
-    chosenCard=atmData.cards.find(x=>x.id===id);
-    if(!chosenCard)return;
-    $('#terminalTitle').textContent='ENTER PIN';
-    terminal.innerHTML=`<p>Card ending <strong>${esc(chosenCard.last4)}</strong></p><form id="pinForm" class="field"><label>Four-digit secure PIN</label><input name="pin" type="password" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" autocomplete="off" required autofocus><button class="button">CONTINUE</button></form>`;
-    atmFrame('pin');
-    terminal.querySelector('input')?.focus();
+  async function beginCardInsertion(id){
+    if(insertingCard)return;
+    const card=(atmData?.cards||[]).find(c=>Number(c.id)===Number(id));
+    if(!card||card.status!=='active')return say('This card is unavailable',true);
+    chosenCard=card;insertingCard=true;const serial=++insertSequence;
+    $('#terminalTitle').textContent='INSERTING CARD';
+    terminal.innerHTML='<p>Inserting your debit card into the physical ATM.</p>';
+    const result=await post('atmInsertCard',{cardId:card.id});
+    if(serial!==insertSequence||atm.classList.contains('hidden'))return;
+    if(!result?.ok){insertingCard=false;say(result?.error||'Could not insert this card',true);return atmCardSelector();}
+    await new Promise(done=>setTimeout(done,Number(result.duration)||1100));
+    if(serial!==insertSequence||atm.classList.contains('hidden'))return;
+    insertingCard=false;atmPin(card.id);
   }
-  async function atmAuthenticate(pin) {
+  function updateKeypadLayer(){
+    const active=hardwareCurrent()||keypadDebug;
+    // Once a card has been inserted the transparent projection is the ONLY
+    // input layer. In particular do not show a substitute keypad on the right.
+    atm.classList.toggle('atm-hardware-mode',active);
+    keypadLayer.classList.toggle('debug',keypadDebug);
+    if(!active || !keypadCoords?.keys?.length){
+      keypadLayer.classList.add('hidden');keypadLayer.innerHTML='';return;
+    }
+    keypadLayer.classList.remove('hidden');
+    const hit=(k,side=false)=>`<button type="button" class="atm-key-hotspot atm-key-centred ${side?'atm-side-hotspot':''}" ${side?'data-side-key':'data-pin-key'}="${esc(k.key)}" aria-label="${side?'ATM side button':'ATM keypad button'} ${esc(k.key)}" style="left:${(Math.max(0,Math.min(1,Number(k.x)))*100).toFixed(3)}%;top:${(Math.max(0,Math.min(1,Number(k.y)))*100).toFixed(3)}%;width:${(Math.max(.004,Math.min(.12,Number(k.w)))*100).toFixed(3)}vw;height:${(Math.max(.008,Math.min(.12,Number(k.h)))*100).toFixed(3)}vh"></button>`;
+    keypadLayer.innerHTML=keypadCoords.keys.map(k=>hit(k)).join('') + (keypadCoords.sides||[]).map(k=>hit(k,true)).join('');
+  }
+  function showPinState(message=''){
+    if(screen!=='pin')return;
+    terminal.innerHTML='';
+    atmFrame('pin',{pinCount:pinDigits.length,message});
+  }
+  function atmPin(id){
+    chosenCard=atmData.cards.find(x=>Number(x.id)===Number(id));if(!chosenCard)return;
+    pinDigits='';atm.dataset.bank=atmData?.customerBankKey||atmData?.bankKey||'maze';
+    $('#atm .atm-title span').textContent=(BRANDS[atm.dataset.bank]||BRANDS.maze).name;
+    screen='pin';showPinState();
+  }
+  async function atmPinPress(key){
+    if(screen!=='pin'||insertingCard||pinBusy)return;
+    if(key==='CANCEL')return atmCardSelector();
+    if(key==='CLEAR'||key==='BACKSPACE'){pinDigits=pinDigits.slice(0,-1);showPinState();return;}
+    if(key==='ENTER'){
+      if(pinDigits.length!==4){say('Enter all four PIN digits',true);return;}
+      const value=pinDigits;pinDigits='';
+      await atmAuthenticate(value);return;
+    }
+    if(/^[0-9]$/.test(key)&&pinDigits.length<4){pinDigits+=key;showPinState();}
+  }
+  async function atmAuthenticate(pin){
+    if(pinBusy)return;
+    pinBusy=true;
     const result=await post('request',{action:'atmAuth',args:[chosenCard.number,pin]});
-    if(!result.ok){say(result.error||'PIN incorrect',true);atmFrame('pin',{message:result.error});return;}
+    pinBusy=false;
+    if(!result.ok){say(result.error||'PIN incorrect',true);screen='pin';pinDigits='';showPinState(result.error||'Incorrect PIN');return;}
     activeCard={...chosenCard,...result.data,cash:atmData.cash};
-    atmData.dailyLimit=result.data?.limit??atmData.dailyLimit;atmMenu();
+    atmData.dailyLimit=result.data?.limit??atmData.dailyLimit;
+    pinDigits='';atmMenu();
   }
-  function atmFast() {
-    $('#terminalTitle').textContent='FAST CASH';
-    terminal.innerHTML='<p>Choose your cash amount.</p><div class="atm-keyset">'+[20,60,100,200,500].map((v,i)=>`<button data-fast="${v}">${i+1} — ${money(v)}</button>`).join('')+'<button data-atm-choice="other">OTHER AMOUNT</button><button data-atm-choice="back">BACK</button></div>';
-    atmFrame('fast');
+  function atmFast(){
+    terminal.innerHTML='';atmFrame('fast',{limit:atmData?.dailyLimit});
   }
-  function atmAmount() {
-    $('#terminalTitle').textContent='CASH WITHDRAWAL';
-    terminal.innerHTML='<form id="amountForm" class="field"><label>Amount to withdraw</label><input name="amount" type="number" inputmode="numeric" min="1" step="1" required><button class="button">CONFIRM</button></form><button class="button ghost" data-atm-choice="back" style="margin-top:10px;width:100%">BACK</button>';
-    terminal.dataset.kind='withdraw';atmFrame('amount',{message:'withdraw'});terminal.querySelector('input')?.focus();
+  function atmAmount(){
+    amountDigits='';terminal.innerHTML='';atmFrame('amount',{enteredAmount:0});
   }
-  async function atmMoney(n) {
+  async function atmMoney(n){
     n=Number(n);
-    if(!activeCard)return;
-    if(!Number.isInteger(n)||n<1)return say('Enter a whole amount',true);
+    if(!activeCard||processingCash)return;
+    if(!Number.isInteger(n)||n<1)return say('Enter a whole withdrawal amount',true);
     if(n>Number(atmData.dailyLimit||5000))return say('Maximum amount per transaction exceeded',true);
-    $('#terminalTitle').textContent='PROCESSING';terminal.innerHTML='<p>Please wait while we process your cash transaction...</p>';
+    processingCash=true;
     atmFrame('processing',{amount:n,message:'withdraw'});
     const result=await post('atmMoney',{kind:'withdraw',amount:n,accountId:activeCard.accountId});
-    if(!result.ok){say(result.error||'Transaction declined',true);terminal.innerHTML=`<p>${esc(result.error||'Transaction declined')}</p><button class="button" data-atm-choice="back">BACK</button>`;atmFrame('error',{message:result.error});return;}
-    activeCard.balance=result.data?.balance??activeCard.balance;activeCard.cash=result.data?.cash??activeCard.cash;
-    if(result.data?.limit!==undefined) atmData.dailyLimit=result.data.limit;
-    terminal.innerHTML=`<p>Please take your cash.<br>New balance: <strong>${money(activeCard.balance)}</strong></p><button class="button" data-atm-choice="back">CONTINUE</button>`;
+    processingCash=false;
+    if(atm.classList.contains('hidden'))return;
+    if(!result.ok){say(result.error||'Transaction declined',true);atmFrame('error',{message:result.error});return;}
+    activeCard.balance=result.data?.balance??activeCard.balance;
+    activeCard.cash=result.data?.cash??activeCard.cash;
+    if(result.data?.limit!==undefined)atmData.dailyLimit=result.data.limit;
     atmFrame('complete',{message:'PLEASE TAKE YOUR CASH',amount:n});
   }
-  function atmChoice(action) {
+  function atmChoice(action){
     if(action==='fast')return atmFast();
     if(action==='withdraw'||action==='other')return atmAmount();
-    if(action==='balance'){
-      terminal.innerHTML=`<p>Available balance <strong>${money(activeCard?.balance)}</strong></p><button class="button" data-atm-choice="back">BACK</button>`;
-      return atmFrame('balance');
-    }
+    if(action==='balance')return atmFrame('balance');
     if(action==='back')return atmMenu();
     if(action==='finish')return atmClose();
   }
-  function atmOpen(payload) {
-    atmData=payload;activeCard=null;chosenCard=null;bank.classList.add('hidden');atm.classList.remove('hidden');
-    $('#terminalTitle').textContent='READY TO BANK';
-    terminal.innerHTML='<p>Insert your Maze Bank card into the reader, or tap the contactless pad.</p>';
-    atmFrame('idle');
+  function handlePhysicalKey(key){
+    if(screen==='pin')return atmPinPress(key);
+    if(screen==='menu'){
+      if(key==='1')return atmChoice('fast');
+      if(key==='2')return atmChoice('withdraw');
+      if(key==='3')return atmChoice('balance');
+      if(key==='CANCEL'||key==='5')return atmChoice('finish');
+      return;
+    }
+    if(screen==='fast'){
+      const quick={'1':20,'2':60,'3':100,'4':200,'5':500};
+      if(quick[key])return atmMoney(quick[key]);
+      if(key==='7')return atmAmount();
+      if(key==='CANCEL'||key==='CLEAR')return atmMenu();
+      return;
+    }
+    if(screen==='amount'){
+      // The real keypad's bottom-left MINUS / bottom-right PLUS keys are not PIN digits.
+      // On the amount screen they adjust the withdrawal in £10 increments.
+      if(key==='MINUS'||key==='PLUS'){
+        const next=Math.max(0,Math.min(9999999,(Number(amountDigits)||0)+(key==='PLUS'?10:-10)));
+        amountDigits=next?String(next):'';
+        atmFrame('amount',{enteredAmount:next});return;
+      }
+      if(key==='CANCEL')return atmMenu();
+      if(key==='CLEAR'){amountDigits=amountDigits.slice(0,-1);atmFrame('amount',{enteredAmount:Number(amountDigits)||0});return;}
+      if(key==='ENTER')return atmMoney(Number(amountDigits)||0);
+      if(/^[0-9]$/.test(key)&&amountDigits.length<7){amountDigits+=key;atmFrame('amount',{enteredAmount:Number(amountDigits)||0});}
+      return;
+    }
+    if(['balance','complete','error'].includes(screen)&&['CANCEL','ENTER','CLEAR'].includes(key))return atmMenu();
   }
-  function atmClose() {atm.classList.add('hidden');post('close');atmData=null;activeCard=null;chosenCard=null;}
+  function handlePhysicalSide(key){
+    if(screen==='menu'){
+      if(key==='L1')return atmFast();
+      if(key==='L2')return atmAmount();
+      if(key==='L3')return atmFrame('balance');
+      if(key==='R1'||key==='R4')return atmClose();
+    }
+    if(screen==='fast'){
+      const quick={L1:20,L2:60,L3:100,L4:200,R1:500};
+      if(quick[key])return atmMoney(quick[key]);
+      if(key==='R3')return atmAmount();
+      if(key==='R4')return atmMenu();
+    }
+    if(screen==='amount'&&key==='R4')return atmMenu();
+    if(['balance','complete','error'].includes(screen)&&key==='R4')return atmMenu();
+  }
+  function atmOpen(payload) {
+    keypadDebug=false;
+    atmData=payload;activeCard=null;chosenCard=null;pinBuffer='';pinBusy=false;keypadCoords=null;pinDigits='';amountDigits='';insertingCard=false;processingCash=false;insertSequence++;keypadModeSent=false;
+    keypadLayer.innerHTML='';keypadLayer.classList.add('hidden');atm.classList.remove('atm-pin-mode');bank.classList.add('hidden');
+    cardViewer.classList.add('hidden');atm.classList.remove('hidden');
+    atm.dataset.bank=payload?.customerBankKey||payload?.bankKey||'maze';
+    $('#atm .atm-title span').textContent=(BRANDS[atm.dataset.bank]||BRANDS.maze).name;
+    $('#terminalTitle').textContent='READY TO BANK';
+    terminal.innerHTML='<p>Insert your debit card into the reader, or tap the contactless pad.</p>';
+    atmFrame('idle');
+    // A player using a physical debit-card item at the ATM has already chosen
+    // their card in the inventory. Go straight to that card's PIN entry, with
+    // the same server-side ownership and physical-item validation as normal.
+    if (payload?.selectedNumber) {
+      const card=(payload.cards||[]).find(c=>c.number===payload.selectedNumber);
+      if (card?.status==='active') beginCardInsertion(card.id);
+      else say('This bank card is frozen, cancelled or no longer valid.',true);
+    }
+  }
+  function atmClose() {keypadDebug=false;setHardwareListening(false);insertSequence++;pinDigits='';amountDigits='';insertingCard=false;keypadCoords=null;keypadLayer.classList.add('hidden');atm.classList.remove('atm-pin-mode');atm.classList.add('hidden');post('close');atmData=null;activeCard=null;chosenCard=null;}
   $('#reader').addEventListener('click',atmCardSelector);$('#tap').addEventListener('click',atmCardSelector);
   $('#terminalExit').addEventListener('click',atmClose);
   terminal.addEventListener('click',e=>{
-    const card=e.target.closest('[data-atm-card]');if(card)return atmPin(Number(card.dataset.atmCard));
+    const card=e.target.closest('[data-atm-card]');if(card)return beginCardInsertion(Number(card.dataset.atmCard));
     const fast=e.target.closest('[data-fast]');if(fast)return atmMoney(Number(fast.dataset.fast));
     const choice=e.target.closest('[data-atm-choice]');if(choice)return atmChoice(choice.dataset.atmChoice);
   });
+  keypadLayer.addEventListener('click',e=>{
+    const key=e.target.closest('[data-pin-key]');if(key){e.preventDefault();return handlePhysicalKey(key.dataset.pinKey);}
+    const side=e.target.closest('[data-side-key]');if(side){e.preventDefault();return handlePhysicalSide(side.dataset.sideKey);}
+  });
   terminal.addEventListener('submit',async e=>{
     e.preventDefault();const f=fields(e.target);
-    if(e.target.id==='pinForm')return atmAuthenticate(f.pin);
     if(e.target.id==='amountForm')return atmMoney(Number(f.amount));
   });
 
   document.addEventListener('keydown',e=>{
     if(e.key==='Escape'){
       if(!modal.classList.contains('hidden'))modal.classList.add('hidden');
+      else if(!bankSelection.classList.contains('hidden')){bankSelection.classList.add('hidden');if(data?.bankKey){bank.classList.remove('hidden');draw();}else post('close');}
+      else if(!cardViewer.classList.contains('hidden'))closeCardPreview();
       else if(!bank.classList.contains('hidden'))closeBank();
       else if(!atm.classList.contains('hidden'))atmClose();
       return;
     }
-    if(atm.classList.contains('hidden')||['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))return;
-    const n=Number(e.key);
-    if(screen==='menu'&&n>=1&&n<=3)return atmChoice(['','fast','withdraw','balance'][n]);
-    if(screen==='fast'&&n>=1&&n<=5)return atmMoney([0,20,60,100,200,500][n]);
-    if(screen==='fast'&&n===7)return atmAmount();
+    if(atm.classList.contains('hidden'))return;
+    if(/^[0-9]$/.test(e.key)&&hardwareSteps.has(screen)){
+      e.preventDefault();return handlePhysicalKey(e.key);
+    }
+    if(e.key==='Backspace'&&hardwareSteps.has(screen)){
+      e.preventDefault();return handlePhysicalKey('CLEAR');
+    }
+    if(e.key==='Enter'&&hardwareSteps.has(screen)){
+      e.preventDefault();return handlePhysicalKey('ENTER');
+    }
+
   });
 
   window.addEventListener('message',e=>{
     const m=e.data;if(!m||typeof m!=='object')return;
+    if(m.type==='openCardPreview')openCardPreview(m.data);
     if(m.type==='openBank')openBank(m.data,m.teller);
     if(m.type==='openAtm')atmOpen(m.data);
-    if(m.type==='close'){bank.classList.add('hidden');atm.classList.add('hidden');modal.classList.add('hidden');}
+    if(m.type==='atmKeypadDebug'){keypadDebug=m.active===true;updateKeypadLayer();}
+    if(m.type==='atmKeypadLayout'){const next=m.data?.keys?.length?m.data:null;if(JSON.stringify(next)!==JSON.stringify(keypadCoords)){keypadCoords=next;updateKeypadLayer();}}
+    if(m.type==='close'){bank.classList.add('hidden');bankSelection.classList.add('hidden');atm.classList.add('hidden');modal.classList.add('hidden');cardViewer.classList.add('hidden');previewCard=null;}
   });
   if(preview)openBank(demo,false);
 })();

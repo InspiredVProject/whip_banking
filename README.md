@@ -1,389 +1,276 @@
-<div align="center">
+<p align="center">
+  <img src="assets/cookie_ocore_banking_banner.png" alt="Cookie OCore — WHIP Banking" width="100%" />
+</p>
 
-# 🏦 MAZE BANK
-
-### Banking, built for WHIP.
-
-**A complete in-world banking experience for FiveM roleplay servers.**
-
-`whip_banking` &nbsp;·&nbsp; `v1.2.6` &nbsp;·&nbsp; `GTA V Legacy` &nbsp;·&nbsp; `WHIP Core 1.2.0+`
+<h1 align="center">WHIP Banking</h1>
+<p align="center"><strong>Three banks. One native WHIP economy. Fully interactive banking.</strong></p>
+<p align="center">
+  <code>v2.8.0</code> · <code>WHIP Core 1.2.0+</code> · <code>GTA V Legacy</code> · <code>oxmysql</code> · <code>Fleeca / Maze / Pacific</code>
+</p>
+<p align="center"><em>Cookie OCore branded resource documentation</em></p>
 
 ---
-
-### ✦ 𝘾𝙊𝙊𝙆𝙄𝙀 𝙊𝘾𝙊𝙍𝙀 ✦
-
-<sub>CRAFTED FOR THE WHIP FRAMEWORK</sub>
-
-</div>
-
-> [!IMPORTANT]
-> **Native WHIP integration.** This resource is a banking *front end* for WHIP Core. It uses WHIP's existing bank accounts, transfers, cash inventory and transaction ledger. It does **not** install another economy or require QB-Core, ESX, Qbox or ox_inventory.
 
 ## Overview
 
-**WHIP Banking** brings a Maze Bank-inspired digital branch, physical debit cards, interactive ATM displays, staffed bank branches and finance features into the world. Players bank through teller conversations, their bank card or an ATM—not everyday chat commands.
+**WHIP Banking** (`whip_banking`) adds a complete roleplay banking experience to FiveM using **WHIP Core's existing accounts, cash handling and transaction ledger**. No QBCore, ESX, Qbox or separate economy is required.
 
-The design is built around physical interaction and WHIP's native UI, map, inventory and configuration systems.
+Customers can join **Fleeca Bank**, **Maze Bank** or **Pacific Standard** at a teller, receive a physical bank card and use themed, in-world DUI cash machines. Account services, loans, savings and transfers remain backed by WHIP Core.
 
-### At a glance
+> [!IMPORTANT]
+> This README is updated for the **v2.8.0 resource manifest**, not the older v1.2.6 notes. It documents available code paths; it does **not** claim the resource has passed live multiplayer, banking or MLO testing on every server.
 
-| System | What's included |
+## Contents
+
+- [Highlights](#highlights)
+- [Bank choices](#bank-choices)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Player guide](#player-guide)
+- [Admin settings](#admin-settings)
+- [ATM calibration](#atm-calibration)
+- [Phone banking integration](#phone-banking-integration)
+- [Developer integrations](#developer-integrations)
+- [Performance](#performance)
+- [Troubleshooting](#troubleshooting)
+- [Pre-release checklist](#pre-release-checklist)
+- [Credits and usage notes](#credits-and-usage-notes)
+
+## Highlights
+
+| System | Included functionality |
 | :-- | :-- |
-| **Bank branches** | 8 teller NPCs, native WHIP interactions and properly named WHIP map blips |
-| **Digital banking** | Account overview, spending chart, statements, transfers, savings and shared accounts |
-| **ATM displays** | Persistent standby screens and a private customer session on the selected ATM |
-| **Debit cards** | Physical inventory item, serials, four-digit PINs, freezing, cancellation and PIN changes |
-| **Cash handling** | Native WHIP cash/account operations, capacity checks and daily ATM withdrawal limits |
-| **Finance** | Credit scores, three loan products, instalments, bills and recurring transfers |
-| **Administration** | Live `/whip` settings, teller placement, ATM positioning and developer alignment tools |
-| **Performance** | Shared standby browser, lazy-loaded private browser and distance-based idle checks |
+| **Three banking brands** | Fleeca (green), Maze Bank (red), Pacific Standard (blue); saved per character |
+| **Bank tellers** | Eight WHIP networked NPC locations; first-time enrolment, switching and account services |
+| **Bank cards** | Nine branded card items across Everyday, Cash+ and Metal finishes, plus legacy Maze card support |
+| **Card preview** | Use the inventory card to display its front, flip to the back and close with ESC; no full-screen dark menu |
+| **ATM DUI** | Always-on standby, private card/PIN session, fast cash, custom withdrawal and balance enquiry |
+| **Physical ATM input** | Clickable number keys, side buttons, Enter, Clear and Cancel; optional keyboard/controller fallback |
+| **Card insertion** | Animated, bank-matched visual card face moving toward the ATM's physical card reader |
+| **Financial services** | Account dashboard, transfers, history, savings, shared accounts, bills, schedules, credit and loans |
+| **WHIP administration** | Native `/whip → Settings → Banking` controls and WHIP-native map blips |
+| **Calibration tools** | In-game DUI alignment, live physical-keypad editor, Save & Test Live and JSON export |
+| **Optimisation** | Lazy DUI creation, cached ATM geometry, proximity-aware searches and adaptive loops |
 
----
+## Bank choices
+
+First-time customers choose a bank at a branch teller. The character's bank profile is stored in `whip_banking_profiles` and controls the banking dashboard, teller popup, card designs and ATM theme.
+
+| Bank | Identity | Savings APR (default) | Daily ATM limit (default) |
+| :-- | :-- | --: | --: |
+| **Fleeca Bank** | Green | 3.0% | $2,500 |
+| **Maze Bank** | Red | 2.0% | $5,000 |
+| **Pacific Standard** | Blue | 4.5% | $5,000 |
+
+These values come from `Config.Banks` in v2.8.0 and are editable in `/whip`. They are **server gameplay settings**, not real-world rates. The resource's global currency symbol defaults to `$` and can be changed to `£`.
+
+Bank switching is enabled by default. When switching at a teller, old cards are cancelled and a new card is issued. **The underlying WHIP account balance, account number and prior loan records are not reset.** Existing legacy Maze cardholders are migrated to a Maze profile without deleting their existing cards or PIN hashes.
 
 ## Requirements
 
-- **FiveM / GTA V Legacy** (the target build documented for this release).
-- **WHIP Core 1.2.0 or newer** and its existing **oxmysql** dependency.
-- A configured, working WHIP character, inventory and banking system.
-- Administrator access to `/whip` for configuration; `whip.devtools` permission for the optional alignment console.
+- **WHIP Core 1.2.0 or newer**, with a loaded WHIP character.
+- **oxmysql**, configured with the server's working database.
+- **FiveM / GTA V Legacy**, the build targeted by this release.
+- The resource folder must be named **`whip_banking`**. Changing the name can break DUI and asset URLs.
+- **Optional:** the matching WHIP Phone bank-theme sync update for themed mobile banking.
 
-> [!NOTE]
-> This README documents the supplied **v1.2.6** release notes. The resource itself was **not provided for runtime testing with this README**, so verify compatibility and every gameplay flow on a development server before releasing it publicly.
+> [!CAUTION]
+> Back up your **database, `whip_banking`, `whip_phone` and saved ATM alignment JSON** before replacing an installed build. Avoid replacing your custom phone resource with an older full phone ZIP; merge only its bank-app changes if you have other apps or DUI pose modifications.
 
 ## Installation
 
-### 1. Add the resource
+### 1. Install the resource
 
-Place the `whip_banking` folder in your server's resources directory. Keep its resource name as **`whip_banking`**.
+Place the complete `whip_banking` folder inside your FiveM resources directory. Keep `config.lua`, `shared/`, `client/`, `server/` and `html/` together.
 
-### 2. Disable WHIP's original ATM interaction
+### 2. Disable the duplicate built-in WHIP ATM interaction
 
-In **`whip_core/config.lua`**, replace the default ATM props list with:
+If the ATM shows both the default WHIP prompt and **Use cash machine**, open **`whip_core/config.lua`** and set:
 
 ```lua
 Config.AtmProps = {}
 ```
 
-This disables the original ATM prompt so it does not appear alongside WHIP Banking's ATM interaction. **Do not remove WHIP's internal ATM callback**; WHIP Banking deliberately calls it for cash withdrawals.
+This disables the *original interaction registration*, not WHIP's underlying banking APIs. Restart **WHIP Core or the full server** for this edit to take effect. Also stop any separate `whip-atmdui` script that attempts to replace the same ATM textures.
 
-> [!WARNING]
-> Edit **`whip_core/config.lua`**, not `whip_banking/config.lua`. This setting is not exposed in WHIP Core's `/whip` config editor. You must restart **`whip_core`** (or the full server) for the original prompt to disappear. Recheck this line after updating WHIP Core. If you installed the separate `whip-atmdui` reference resource, stop it to prevent competing screens.
-
-### 3. Check your start order
-
-In `server.cfg`, ensure WHIP Banking starts **after** WHIP Core:
+### 3. Set the startup order
 
 ```cfg
 ensure oxmysql
 ensure whip_core
 ensure whip_banking
+ensure whip_phone   # only if installed; start it after whip_banking
 ```
 
-Do not duplicate `ensure` entries if `oxmysql` and `whip_core` already start elsewhere in your config.
+Only add `ensure` lines that are not already present in `server.cfg`. If your existing WHIP setup starts these elsewhere, keep the same dependency order.
 
-### 4. Check the bank-card accessory slot
+### 4. Start and verify
 
-By default, the resource registers inventory **slot 5** as **Bank Card**, replacing the last of WHIP's three vehicle-key slots. The other two key slots remain available.
+The banking resource creates its supporting SQL tables automatically, including profiles, cards, loans, credit history, interest payouts, invoices and recurring payments. Ensure your database account has the permissions needed for table creation/migration.
 
-```lua
--- whip_banking/config.lua
-Config.CardAccessorySlot = 5
-```
-
-This is designed to work with the WHIP and D11 inventory displays without editing their files. Existing keys in slot 5 are not deleted; move them to your pockets before equipping a bank card.
-
-To keep all three key slots, set `Config.CardAccessorySlot = false`. You can also choose another unused accessory slot. If registration fails, check your server console for a slot conflict or accessory-row size warning.
-
-### 5. Start the server and confirm the database
-
-On startup, the resource is documented to create these tables in your **existing WHIP database**:
-
-```text
-whip_banking_cards
-whip_banking_loans
-whip_banking_loan_payments
-whip_banking_credit
-whip_banking_interest
-whip_banking_bills
-whip_banking_schedules
-```
-
-**No manual SQL import is required** according to the provided release notes. Look for:
+Look for this server console line:
 
 ```text
 [whip_banking] Database ready; using WHIP native banking ledger
 ```
 
-### 6. Complete a first-use test
+Visit a bank teller, select a bank on a test character, issue a card, and verify the card appears in WHIP inventory before testing a withdrawal.
 
-Join with a fully loaded character, visit a branch, interact with a teller, issue a bank card and check that it appears in inventory. Then approach an ATM and test the physical-card/PIN workflow using a **low-value** withdrawal.
+## Player guide
 
----
+### Visiting a bank
 
-## How players use it
+1. Walk to any supported banking branch and interact with the **bank teller**.
+2. First-time customers choose **Fleeca**, **Maze** or **Pacific** and select a card finish and four-digit PIN.
+3. Returning customers can open the bank's themed dashboard to view accounts, send transfers, manage cards, use savings and discuss loans.
+4. To change banks, use the banking dashboard's **Bank** tab and the bank-switching option (if enabled by your server).
 
-### 🏛️ Bank branch
+Supported branches: **Legion Square, Hawick, Alta Street, Rockford Hills, Great Ocean, Route 68, Paleto Bay and Pacific Standard**. Branch positions and tellers are editable in WHIP settings.
 
-Approach a teller and press **E** to start a WHIP conversation. The banking dashboard covers accounts, transfers, transactions, cards, savings, loans and more. **New bank cards must be issued through a teller.**
+### Physical bank cards
 
-### 💳 Physical bank card
+- **Everyday**, **Cash+** and **Metal** finishes are available for each bank, with corresponding inventory item images.
+- Using a valid card in inventory displays the **physical card preview**, with a front/back **Flip** control. This does not open the full bank dashboard.
+- The front shows a masked card number, cardholder name and validity; the reverse does not expose the PIN or a usable CVV.
+- A teller can issue, freeze, cancel and change the PIN of an eligible card.
+- Three incorrect PIN attempts trigger the configured temporary lockout (the supplied implementation uses 15 minutes).
 
-The card item is named **`maze_bank_card`**. Each card has a serial number, an account link and a salted four-digit PIN. Players can:
+By default, `Config.CardAccessorySlot = 5` reserves WHIP equipped slot 5 for a bank card. Set it to `false` if you need to retain the third vehicle-key slot. New items use `whip_banking_*` prefixes; existing `maze_bank_card` items remain supported.
 
-- Use their card from inventory to open personal digital banking.
-- Drag it into the dedicated **Bank Card** equipped slot.
-- Freeze or cancel a card, or change its PIN.
-- Use the card at an ATM; **three incorrect PIN attempts** trigger a **15-minute lockout**.
+### Using a cash machine
 
-Cancelled cards may remain as inventory items, but they no longer authorise new ATM sessions.
+1. Approach an ATM and choose **Use cash machine**.
+2. Insert/tap an active debit card; a bank-branded card insertion effect is displayed.
+3. Enter the **four-digit PIN using the physical machine keypad** (or supported input fallback).
+4. Select **Fast Cash**, **Withdraw** or **Balance**, using the screen-side buttons and ATM keys.
+5. Exit using **Cancel / ESC**.
 
-### 🏧 ATM
+**ATM cash deposits are disabled.** Deposits and other full banking services are carried out through bank tellers. The active ATM screen follows the **player's selected bank**, even when the physical machine displays another bank's signage.
 
-Walk up to an ATM, press **E**, then choose **Insert Card** or **Tap Here**. Select a card and enter its PIN. Available actions are:
+## Admin settings
 
-| Input | Action |
+Open **`/whip → Settings → Banking`** as a WHIP administrator. The current release exposes these groups:
+
+| Settings category | Controls |
 | :-- | :-- |
-| `1` | Fast Cash |
-| `2` | Withdraw |
-| `3` | Balance |
-| `Esc` | Cancel / exit |
+| Banks & customer choice | Bank switching, savings APR and daily withdrawal limits |
+| ATM standby brands | Fallback bank theme for each supported ATM prop model |
+| ATM screens | Idle screens, material replacement, MLO fallback, draw distances and world-screen offsets |
+| ATM card slot & keypad | Per-model card-slot coordinates and physical keypad layout |
+| Bank map blips | Visibility, sprite, colour, scale, grouped branch legend and nearby-only minimap |
+| Accounts & cards | Card count, shared currency settings, default limits and credit settings |
+| Personal / vehicle / business loans | Amount caps, APR, terms and eligibility thresholds |
+| Bank branches | Teller coordinates, NPCs and interaction positions |
 
-**ATMs are withdrawal-only.** Deposits are intentionally unavailable. The documented daily limit is **$5,000** by default, based on WHIP's actual `bank_transactions` records; adjust it through banking settings.
+**Map blips:** WHIP Banking uses WHIP's server-side `ShowBlip` registry, so the custom WHIP pause map displays bank names instead of GTA's default *Financier strand* sprite label. All branches remain visible on the full map; short-range minimap visibility can be enabled.
 
-### 💰 Savings, loans and payments
+**Saved settings override packaged defaults.** If you have already calibrated an ATM in `/whip`, a newer ZIP won't automatically replace your saved position.
 
-- **Savings:** Open savings pots in Accounts and use real WHIP account numbers for transfers. The documented default savings APR is **2%**, with interest processed monthly.
-- **Loans:** Choose from three products with credit-score, borrowing-limit and active-loan checks. Funds are paid into the WHIP main account; instalments are due on a **30-day** interval.
-- **Bills:** Approved server resources can issue invoices payable into a real creditor account.
-- **Standing orders:** Schedule recurring transfers every **7, 14 or 30 days**; an order pauses if its owner loses withdrawal permission.
+## ATM calibration
 
----
+### Display alignment
 
-## Bank locations & map markers
+Use **`/w → Developer Mode → Panels → Banking - ATM Alignment → Align nearest ATM`** to position the live DUI over the actual screen glass. Move, resize and tilt the panel while looking at the real ATM. Save the model locally, then **Export All JSON** when satisfied.
 
-Eight built-in teller locations are documented:
+### Physical keypad alignment (v2.8.0)
 
-| City branches | Wider map branches |
-| :-- | :-- |
-| Legion Square | Great Ocean |
-| Hawick | Route 68 |
-| Alta Street | Paleto Bay |
-| Rockford Hills | Pacific Standard |
+1. Stand directly in front of the ATM.
+2. Open **`/w → Developer Mode → Panels → Banking - ATM Alignment`**.
+3. Choose **LIVE: Align physical ATM keypad**.
+4. Adjust the coloured outlines until they match **1–9**, `− / 0 / +`, **Cancel**, **Clear** and **Enter**.
+5. Choose **Save & Test Live**. The editor opens a real ATM session using the same camera/projected coordinates so you can verify the hitboxes.
+6. Export the keypad JSON for permanent inclusion in `shared/atm_hardware.lua` / the live model settings.
 
-Bank markers are registered through **WHIP Core's server-side `ShowBlip` system**, not standalone GTA map blips. This is important because WHIP's pause map may replace the names of non-WHIP blips with a sprite's default label.
-
-- **Full map:** all eight branch locations.
-- **Minimap:** nearby branches only, by default.
-- **Map legend:** one grouped **Maze Bank (8)** entry, by default.
-- **Optional:** show individual branch names such as **Maze Bank - Paleto Bay**.
-
-Changes made to branch positions and names in `/whip` are intended to update their WHIP blips without restarting the resource.
-
-## Configure everything in `/whip`
-
-For normal tuning, open **`/whip → Settings → Banking`** with the appropriate WHIP administrator access.
-
-| Settings category | Editable options |
-| :-- | :-- |
-| **Bank map blips** | Visibility, icon, colour, scale, minimap range, branch names, legend name |
-| **ATM screens** | Standby display, world-screen fallback, models, materials, draw distance, preview, interaction range |
-| **Accounts & cards** | Display bank name, currency symbol, card limit, cash limit, savings APR, credit defaults |
-| **Loan products** | Personal / vehicle / business limits, APRs, terms and minimum credit scores |
-| **Individual ATM models** | Horizontal centre, depth, height, width, screen height and face tilt |
-| **Bank branches** | Ped model, teller names, interaction positions, ped positions and interaction distance |
-
-The four default ATM prop models are:
-
-```lua
-prop_atm_01
-prop_atm_02
-prop_atm_03
-prop_fleeca_atm
-```
+The editor stores local working overrides in the developer's FiveM resource KVP. It does **not** automatically deploy those values to other players; the exported JSON must be integrated into the server resource or its saved settings.
 
 > [!TIP]
-> **Saved settings override config defaults.** If a new update appears to ignore an ATM position or blip setting, inspect the previously saved `/whip` values first.
+> If clicks move after saving, confirm the model matches the editor selection and use **Save & Test Live** to compare the actual hitboxes. The v2.8.0 update specifically aligned the live/editor camera paths, but custom prop geometry still needs an in-game check.
 
-### Place or move tellers
+## Phone banking integration
 
-Within the corresponding branch setting, use **Use where I stand** for its `vec4` position. The WHIP-managed teller ped should respawn at the updated location. No banking-specific chat command is required.
+The matching `whip_phone` banking module obtains the character's selected bank from this trusted server export:
 
----
+```lua
+local profile = exports.whip_banking:GetBankProfile(source)
+-- e.g. { key = 'fleeca', name = 'Fleeca Bank', ... }
+```
 
-## ATM screen system
+This is a **server-side export**; do not trust a client-submitted bank name. The companion phone update supports red, green and blue branding, real WHIP account balances, transfers and transaction history, and a refresh when the player switches banks at a teller.
 
-WHIP Banking uses two display paths:
+To keep your custom 3D phone positioning and other apps, install the **banking-only phone patch** rather than overwriting the entire `whip_phone` resource with an older copy.
 
-1. **Standby screen:** a shared red Maze Bank display appears on supported ATMs using native texture replacement (`AddReplaceTexture`). A world-space fallback is available for retextured/custom MLO machines where the native material does not display.
-2. **Private customer screen:** a second DUI appears **only on the ATM currently in use**, keeping neighbouring screens on standby instead of exposing account details or a PIN.
-
-The native materials described for the reference method include `prop_cashpoint_screen` and `prop_fleece_emis`. Only add the **screen material** for a custom ATM, not a texture for its bezel or body.
-
-### Live alignment console (developer only)
-
-1. Enable WHIP **Developer Mode** through `/w` (requires `whip.devtools`).
-2. Stand beside an ATM and open **`/w → Panels → Banking - ATM Alignment → Align nearest ATM`**.
-3. Move the cyan screen guide until it precisely covers the physical ATM display.
-4. Select **Save This Model**, then use **Next ATM** to move through nearby machines.
-5. When finished, choose **Export All JSON → Copy JSON** (or **Download .JSON**, where supported).
-
-The exported file is named `whip_banking_atm_alignment.json`. A developer can integrate these offsets into `Config.AtmScreens` so **all** players receive the calibrated positions.
-
-| Keys | Effect |
-| :-- | :-- |
-| `←` / `→` or `A` / `D` | Move left / right |
-| `↑` / `↓` or `E` / `Q` | Move up / down |
-| `PgUp` / `PgDn` or `W` / `S` | Move out from / into the ATM |
-| `Z` / `X` | Narrow / widen |
-| `C` / `V` | Shorten / heighten |
-| `R` / `F` | Increase / decrease face tilt |
-| `Enter` | Save current model |
-| `Esc` | Close the editor or JSON view |
-
-The **Adjustment Step** setting supports coarse and fine movement; numeric fields allow exact values. Use **⇄** to swap the editor between screen sides. **Reset Model** requires two presses.
-
-Local alignment data is stored using FiveM resource KVP on the developer's PC. It persists across local game restarts but **does not immediately change server settings or other players' screens**. Use **Export all ATM positions** from the `/w` panel even when no ATM is nearby.
-
-> [!CAUTION]
-> Close the alignment editor **before** using the ordinary ATM interaction. After calibration, verify the camera, touch targets and visible screen edges on each actual prop/MLO variant.
-
-### Alternative: calibrate through `/whip`
-
-Open **`/whip → Settings → Banking → ATM screens`**, enable **ATM screen alignment preview**, then edit the values for the relevant ATM model while observing its cyan border. **More negative depth** moves the panel towards the player; **more positive depth** moves it into the ATM. Disable the preview when finished.
-
-For a Fleeca/LG-Zone-style ATM, the source notes suggest **horizontal −0.095 m, depth +0.045 m, height 1.180 m, width 0.285 m, screen height 0.205 m** as an initial test only. Final offsets depend on the exact streamed prop and MLO.
-
----
-
-## Performance & Resmon
-
-The source describes a shared standby DUI created once and a private ATM DUI created only when needed. Its client checks nearby ATM models before scanning broader object pools, caches fallback coordinates, and sleeps when no screen needs to be rendered.
-
-| Situation | Expected behaviour |
-| :-- | :-- |
-| Away from ATMs | Designed to show **0.00 ms most of the time**, with occasional proximity probes |
-| Near active world-space standby displays | Some rendering cost is normal because the fallback must draw each frame |
-| ATM menu or alignment editor open | Additional rendering/UI cost is expected |
-
-If all your machines correctly show standby screens through native texture replacement, you can disable **`Config.AtmWorldStandbyFallback`** in `/whip → Settings → Banking` to remove per-frame standby quads. **Do not disable it if custom MLO machines become blank.**
-
-**How to measure:** restart `whip_banking`, allow DUI assets to load, then open `resmon 1`. Compare idle usage away from ATMs, next to a standby machine, while using an ATM, and during alignment. Test vanilla machines **and** custom MLOs.
-
-> **Resmon note:** An uninterrupted `0.00 ms` is not guaranteed; real measurements depend on nearby props, camera state, the client and the chosen fallback mode.
-
-## Developer exports
+## Developer integrations
 
 ### Create a trusted bill
 
-Call this from **another server-side resource**. Bill creation should not be exposed as a public client event.
+Call this from another **server-side resource** only:
 
 ```lua
-local invoiceId, why = exports.whip_banking:CreateBill(
-    source,                   -- payer's current server ID
+local billId, err = exports.whip_banking:CreateBill(
+    source,                    -- payer's server ID
     'Vehicle repair invoice', -- title
-    1200,                     -- amount in WHIP dollars
-    garageBusinessAccountId,  -- destination account; nil to deduct
-    7,                        -- due in 7 days
-    'mechanic'                -- category
+    1200,                      -- amount
+    garageBusinessAccountId,   -- receiving account, or nil
+    7,                         -- due in days
+    'mechanic'                 -- bill category
 )
 ```
 
-### Read a credit score
+### Retrieve a credit score
 
 ```lua
 local score = exports.whip_banking:GetCreditScore(source)
 ```
 
-According to the provided notes, the resource applies server-side ownership checks, account permissions, per-operation rate limits and startup reconciliation for interrupted finance operations.
+The resource intentionally does not publish a client event for arbitrary invoice creation. Money movements and ATM authorisation are checked server-side against WHIP's account system, card ownership and status.
 
----
+## Performance
+
+- Standby DUIs are shared, and the private ATM browser is created only when required.
+- Nearby ATM searches use model proximity checks and cached world geometry rather than a constant full-world scan.
+- Loops sleep when no ATM surfaces need drawing.
+- The optional `AtmWorldStandbyFallback` draws screen surfaces for custom MLOs whose original textures are not replaced correctly.
+
+**0.00 ms idle Resmon is a target, not a guarantee.** Rendering an active ATM or world-space standby surfaces costs measurable time. Check `resmon 1` away from ATMs, near idle ATMs, during an active session and in the calibration editor before changing performance settings.
 
 ## Troubleshooting
 
-<details>
-<summary><strong>Two ATM prompts appear on the same machine</strong></summary>
+| Symptom | Check |
+| :-- | :-- |
+| Two **Use ATM** prompts | Set `Config.AtmProps = {}` in `whip_core/config.lua`, then restart Core/server; disable separate ATM scripts |
+| Bank app stays red after switching | Install the matching `whip_phone` bank sync patch and ensure `whip_banking` starts before the phone |
+| An ATM is blank | Verify the model and texture mapping; enable the MLO 3D standby fallback if native replacement fails |
+| ATM screen is offset | Align the correct model in the DUI editor; check saved `/whip` overrides |
+| Clickable keypad differs after saving | Use v2.8.0 **Save & Test Live**, recheck the model and export its aligned keypad JSON |
+| Map legend shows *Financier strand* | Check that bank blips use WHIP `ShowBlip` and remove old client-created duplicates |
+| Can't withdraw | Verify card ownership, status, PIN lockout, daily withdrawal cap, bank balance and inventory cash capacity |
+| SQL migration fails | Verify oxmysql starts first and the database user can `CREATE` / `ALTER` tables |
 
-Set `Config.AtmProps = {}` in **`whip_core/config.lua`**, restart **`whip_core`** or the full server, and stop any separate `whip-atmdui` resource.
+## Pre-release checklist
 
-</details>
+- [ ] Confirm each teller appears at the correct counter, without duplicates after restarting.
+- [ ] Choose and switch between all three banks; verify balances and card transitions.
+- [ ] View and flip a card; confirm PINs are never revealed by the preview.
+- [ ] Test card insertion, physical keypad mapping, PIN rejection and PIN lockout.
+- [ ] Check standby and active DUIs on all four supported ATM prop models.
+- [ ] Confirm ATM deposits are not available.
+- [ ] Test phone branding refresh after switching banks.
+- [ ] Verify full-map blips and short-range minimap behaviour.
+- [ ] Test transfers, loans, bills and scheduled payments against a staging database.
+- [ ] Check Resmon and server logs following a **full server restart**.
 
-<details>
-<summary><strong>ATM standby screen is blank on a custom MLO</strong></summary>
+## Credits and usage notes
 
-Re-enable the world-space standby fallback in `/whip`. Check that the custom model is listed and that its screen-only texture mapping is correct. Use the in-game alignment tools to correct its position.
+<p align="center">
+  <img src="assets/cookie_ocore_developer_mark.svg" alt="Cookie OCore developer mark" width="420" />
+</p>
 
-</details>
+**Cookie OCore** mark and README presentation were created for this documentation package. The provided v2.8.0 resource manifest currently identifies **Lunny Dev** as its author; this README does not silently overwrite that metadata or assert transfer of ownership.
 
-<details>
-<summary><strong>Interactive ATM screen floats above or inside the prop</strong></summary>
+WHIP integration uses the [WHIP Core repository](https://github.com/WHIPFX/whip_core) APIs. The ATM rendering approach follows the supplied `whip-atmdui` reference. Barlow font files supplied with the existing resource retain their own licence terms. GTA V, Fleeca Bank, Maze Bank and Pacific Standard are fictional game-world assets/names associated with Rockstar Games.
 
-Run the developer alignment console for the actual prop model, save its local offset and export the JSON for permanent integration. Test from a side angle because perspective can exaggerate small offsets.
-
-</details>
-
-<details>
-<summary><strong>Bank blips show a generic or incorrect name</strong></summary>
-
-Confirm you are running the resource's WHIP-native blip implementation. In `/whip → Settings → Banking → Bank map blips`, use **Nearby-only minimap blips = ON**. Set **Include branch names in blips = OFF** for one grouped **Maze Bank (8)** legend entry. Clear the **Map legend bank name** override to inherit the bank name. Previously saved settings may persist after upgrading.
-
-</details>
-
-<details>
-<summary><strong>Bank card slot is unavailable</strong></summary>
-
-Check `Config.CardAccessorySlot` and the server log for registration warnings. Make sure the accessory strip supports the chosen slot and another resource has not claimed it. Set the option to `false` to restore the original three key slots.
-
-</details>
-
-<details>
-<summary><strong>Setting a new default does not change the screen</strong></summary>
-
-WHIP's saved `/whip` values take precedence over new file defaults. Inspect the saved ATM model and screen settings, including any local alignment overrides.
-
-</details>
-
-## Pre-launch checklist
-
-- [ ] All eight tellers appear at the correct desks, facing players; no duplicates after restart.
-- [ ] Multiple nearby ATMs show standby screens at the same time.
-- [ ] All four default ATM models render correctly; custom MLO machines have been tested.
-- [ ] Using one ATM changes only that ATM to the private customer display.
-- [ ] ATM screen guides, camera position, keypad and buttons align with each machine.
-- [ ] Card issuance, inventory, equipped slot, PIN retry limit, PIN change, freeze and cancellation work.
-- [ ] Cash withdrawal and failed-capacity handling never create or lose money.
-- [ ] Account transfers, savings, loan funding, instalments and bill payments reconcile correctly.
-- [ ] Grouped/individual bank map names and nearby-only minimap behaviour are correct.
-- [ ] All gameplay and finance state survives a **full server restart**.
-- [ ] `resmon 1` has been checked both near and away from ATMs.
-
-> [!WARNING]
-> **Known boundaries:** The normal ATM UI applies card/PIN and withdrawal-limit checks, but WHIP Core's public ATM callbacks may still be callable by other resources. WHIP's real account numbers are retained instead of replacing them with decorative example numbers. Ambiguous loan disbursements can enter a `review` state, requiring staff to inspect the bank ledger before resolving them. Validate these flows against your installed WHIP version.
+**Licence:** This README does not grant redistribution, resale or sublicensing rights. Check the actual resource licence and the rights of every bundled dependency and asset before distribution.
 
 ---
 
-## Credits & attribution
-
-<div align="center">
-
-### ✦ 𝘾𝙊𝙊𝙆𝙄𝙀 𝙊𝘾𝙊𝙍𝙀 ✦
-
-**Development & integration**
-
-<sub>MADE FOR THE WORLD OF WHIP • BUILT FOR ROLEPLAY</sub>
-
-</div>
-
-- Built for the [WHIP Core framework](https://github.com/WHIPFX/whip_core) and its banking, UI, inventory and map APIs.
-- The ATM screen replacement approach was informed by the supplied `whip-atmdui-1.1.0` reference; the source notes state its bundled art and code were **not** copied into this release.
-- Barlow and Barlow Condensed fonts originate from WHIP's font assets. Consult the SIL Open Font License notices distributed with the resource in `html/fonts/`.
-- **Maze Bank, Grand Theft Auto V and related fictional branding** are the property of their respective owners, including Rockstar Games. This is an independent FiveM resource, not an official Rockstar product.
-
-<div align="center">
-
----
-
-**MAZE BANK** · `whip_banking` · **v1.2.6**
-
-<sub>✦ COOKIE OCORE ✦</sub>
-
-</div>
+<p align="center"><strong>COOKIE OCORE</strong> · Crafted for FiveM communities · <code>whip_banking v2.8.0</code></p>

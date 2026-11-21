@@ -17,6 +17,21 @@ local groups = {
         { key='Blips.LegendName', type='string', maxLen=40, label='Map legend bank name',
           help='Leave empty to use the bank display name, such as Maze Bank. WHIP owns the blips and uses this text in its pause-map legend.' },
     } },
+    { label='Banks & customer choice', settings={
+        {key='AllowBankSwitching',type='bool',label='Allow changing banks at tellers',
+          help='Switching banks keeps WHIP balances and loans unchanged, cancels old cards and issues a new branded card.'},
+        {key='Banks.fleeca.savingsApr',type='number',min=0,max=30,step=0.1,label='Fleeca savings APR',unit='%'},
+        {key='Banks.fleeca.atmDailyLimit',type='int',min=100,max=100000,step=100,label='Fleeca ATM daily limit'},
+        {key='Banks.maze.savingsApr',type='number',min=0,max=30,step=0.1,label='Maze savings APR',unit='%'},
+        {key='Banks.maze.atmDailyLimit',type='int',min=100,max=100000,step=100,label='Maze ATM daily limit'},
+        {key='Banks.pacific.savingsApr',type='number',min=0,max=30,step=0.1,label='Pacific savings APR',unit='%'},
+        {key='Banks.pacific.atmDailyLimit',type='int',min=100,max=100000,step=100,label='Pacific ATM daily limit'},
+    }},
+    {label='ATM standby brands',settings={
+        {key='AtmModelBanks',type='map',label='Brand for each ATM model',maxItems=30,
+         fields={{key='bank',type='enum',label='Bank',options={{value='fleeca',label='Fleeca'},{value='maze',label='Maze'},{value='pacific',label='Pacific'}}}},
+         help='Each ATM model uses this standby theme, even when nobody is using it. The active session follows the character bank; these settings control only idle ATM model branding.'},
+    }},
     { label = 'ATM screens', settings = {
         { key='AtmStandbyEnabled', type='bool', label='Always-on ATM standby screens',
           help='Places the Maze Bank welcome screen on the ATM model’s real display material. No 3D positioning needed.' },
@@ -74,6 +89,19 @@ local models = {
     {label='Fleeca ATM', key='prop_fleeca_atm'},
     {label='Other ATM models', key='default'},
 }
+
+for _, model in ipairs(models) do
+    local base='AtmHardware.'..model.key..'.'
+    groups[#groups+1]={label=model.label..' card slot & keypad',settings={
+        {key=base..'slot.side',type='number',min=-1,max=1,step=0.005,unit='m',label='Card slot horizontal'},
+        {key=base..'slot.out',type='number',min=-1,max=1,step=0.005,unit='m',label='Card slot depth'},
+        {key=base..'slot.up',type='number',min=0,max=3,step=0.005,unit='m',label='Card slot height'},
+        {key=base..'keypad.left',type='number',min=-0.3,max=1.2,step=0.005,label='Move entire keypad left / right',help='VISUAL EDITOR: /w > Panels > Banking - ATM Alignment > LIVE: Align physical ATM keypad. Then save/export JSON. This numeric value is a fallback.'},
+        {key=base..'keypad.top',type='number',min=0.75,max=3.0,step=0.005,label='Move entire keypad up / down',help='Use the live editor in /w to see the real keypad. This numeric value is a fallback.'},
+        {key=base..'keypad.width',type='number',min=0.2,max=1.5,step=0.005,label='Keypad overall width',help='Scale the entire physical keypad area. Individual button positions already match the close-up image.'},
+        {key=base..'keypad.height',type='number',min=0.2,max=1.5,step=0.005,label='Keypad overall height',help='Scale the entire keypad vertically; the coloured action keys have wider click targets.'},
+    }}
+end
 
 for _, model in ipairs(models) do
     local key = 'AtmScreens.' .. model.key .. '.'

@@ -3,6 +3,33 @@ Config = {}
 Config.Brand = 'MAZE BANK'
 Config.Currency = '$' -- Screenshot-accurate; change to '£' for a UK economy.
 Config.CardItem = 'maze_bank_card'
+-- Three WHIP-native brands share the exact same real WHIP account balances.
+-- A character chooses at any teller. The bank identity is persistent per character.
+Config.AllowBankSwitching = true
+Config.Banks = {
+    fleeca = {name='Fleeca Bank',shortName='FLEECA',colour='#27945d',
+        cardItem='whip_banking_fleeca_card',
+        cardItems={classic='whip_banking_fleeca_card',black='whip_banking_fleeca_black_card',metal='whip_banking_fleeca_metal_card'},cardPrefix='4100',savingsApr=3.0,atmDailyLimit=2500},
+    maze = {name='Maze Bank',shortName='MAZE',colour='#c52e37',
+        cardItem='whip_banking_maze_card',
+        cardItems={classic='whip_banking_maze_card',black='whip_banking_maze_black_card',metal='whip_banking_maze_metal_card'},cardPrefix='5500',savingsApr=2.0,atmDailyLimit=5000},
+    pacific = {name='Pacific Standard',shortName='PACIFIC',colour='#204b85',
+        cardItem='whip_banking_pacific_card',
+        cardItems={classic='whip_banking_pacific_card',black='whip_banking_pacific_black_card',metal='whip_banking_pacific_metal_card'},cardPrefix='6300',savingsApr=4.5,atmDailyLimit=5000},
+}
+-- Includes legacy item support; the item prefix is intentionally whip_banking for all NEW cards.
+Config.BankCardItems = {
+    'maze_bank_card',
+    'whip_banking_fleeca_card','whip_banking_fleeca_black_card','whip_banking_fleeca_metal_card',
+    'whip_banking_maze_card','whip_banking_maze_black_card','whip_banking_maze_metal_card',
+    'whip_banking_pacific_card','whip_banking_pacific_black_card','whip_banking_pacific_metal_card'
+}
+-- ATM standby and private active session branding follow the character's own bank.
+-- Unregistered characters temporarily see the ATM model's configured fallback identity.
+Config.AtmModelBanks = {
+    prop_fleeca_atm={bank='fleeca'}, prop_atm_01={bank='maze'}, prop_atm_02={bank='maze'}, prop_atm_03={bank='maze'}
+}
+
 -- Replace WHIP's third vehicle-key slot with a dedicated Maze Bank card slot.
 -- The accessory strip defaults to 1=Phone, 2=Money, 3/4/5=Vehicle Keys.
 -- Set false to leave all three vehicle-key slots unchanged.

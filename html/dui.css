@@ -15,3 +15,23 @@
 .calibration-guide .crosshair { position: relative; z-index: 1; font-size: 110px; line-height: 1; color: #ffdf3c; }
 .calibration-guide strong { position: relative; z-index: 1; font-size: 34px; letter-spacing: 1px; }
 .calibration-guide small { position: relative; z-index: 1; font-size: 21px; max-width: 75%; }
+
+/* Real ATM surfaces support three independently branded standby and session DUIs. */
+.screen.bank-fleeca{background:#218953;color:#f5f5ed;border-color:#257d50}
+.screen.bank-fleeca::after{box-shadow:inset 0 0 30px #0a381540}
+.screen.bank-fleeca .pattern{opacity:.24}
+.screen.bank-pacific{background:#214b82;color:#fff;border-color:#193961}
+.screen.bank-pacific .pattern{opacity:.22}
+.screen.bank-fleeca .brand-mini svg,.screen.bank-pacific .brand-mini svg{display:none}
+.screen.bank-fleeca .brand-mini,.screen.bank-pacific .brand-mini{font:italic 800 37px BC,Impact,sans-serif}
+.screen.bank-pacific .brand-mini{font-size:32px}
+.screen.bank-fleeca.light{background:#1e7a49;color:#fff;border-color:#216b42}
+.screen.bank-pacific.light{background:#224d82;color:#fff;border-color:#17395f}
+.screen.bank-fleeca.light .brand-mini,.screen.bank-pacific.light .brand-mini{color:#fff}
+.screen.bank-fleeca.light .screen-bottom,.screen.bank-pacific.light .screen-bottom{color:#fff}
+.screen.bank-fleeca.light .brand-mini,.screen.bank-pacific.light .brand-mini{top:25px}
+.screen.bank-fleeca.light .atm-middle p,.screen.bank-pacific.light .atm-middle p{color:#d9e9e2}
+.screen.bank-fleeca.light .atm-choice .key{background:#f5f4ed;color:#10412c}
+.screen.bank-pacific.light .atm-choice .key{background:#f6f3ed;color:#15335a}
+.screen.bank-fleeca.light .screen-title,.screen.bank-pacific.light .screen-title{color:#fff}
+.screen.bank-fleeca.light .screen-bottom kbd,.screen.bank-pacific.light .screen-bottom kbd{background:#e8e8df;color:#16261e}

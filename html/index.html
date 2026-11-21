@@ -5,9 +5,13 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="align.css">
-  <title>MAZE BANK</title>
+  <link rel="stylesheet" href="keypad_align.css">
+  <title>WHIP BANKING</title>
 </head>
 <body>
+  <section id="bankSelection" class="bank-selection hidden" aria-label="Choose your bank">
+    <div id="bankSelectionContent"></div>
+  </section>
   <main id="bank" class="bank hidden">
     <aside class="sidebar">
       <div class="logo">
@@ -39,6 +43,8 @@
 
   <!-- ATM browser lives on the prop via DUI. This transparent NUI only provides reader/keypad input. -->
   <section id="atm" class="atm-overlay hidden">
+    <!-- Transparent hit-targets projected over the model's physical ATM keypad. -->
+    <div id="atmPhysicalKeypad" class="atm-physical-keypad hidden" aria-label="Physical ATM number pad"></div>
     <div class="atm-title"><span>MAZE BANK</span><small>CASH MACHINE</small></div>
     <div class="atm-right">
       <button id="reader" class="atm-side-action"><i></i><strong>INSERT CARD</strong></button>
@@ -87,9 +93,53 @@
     </div>
   </section>
 
+  <!-- WHIP developer-only live editor. Key outlines correspond exactly to hit targets. -->
+  <section id="keypadAlign" class="keypad-align hidden" aria-label="Live ATM keypad alignment editor">
+    <div class="keypad-align-guides" id="keypadAlignGuides" aria-hidden="true">
+      <div id="keypadAlignGuideMove" class="keypad-align-guide-move"></div>
+    </div>
+    <aside id="keypadAlignPanel" class="keypad-align-panel">
+      <header><div><small>WHIP BANKING / DEV TOOLS</small><h2>LIVE KEYPAD ALIGNMENT</h2></div><button id="kpAlignClose" title="Close editor" aria-label="Close editor">✕</button></header>
+      <div class="keypad-align-body">
+        <div class="keypad-model" id="kpAlignModel">ATM MODEL</div>
+        <p class="keypad-align-desc">The coloured outlines are the REAL clickable buttons. Move them onto the keys on the machine. Drag the outline group or use the arrows below.</p>
+        <div class="keypad-legend"><span class="keypad-legend-num">1</span> Number keys <span class="keypad-legend-cancel">C</span> Cancel <span class="keypad-legend-clear">CLR</span> Clear <span class="keypad-legend-enter">ENT</span> Enter</div>
+        <label class="keypad-step-label">ADJUSTMENT <select id="kpAlignStep"><option value="0.001">Fine · 0.001</option><option selected value="0.005">Normal · 0.005</option><option value="0.02">Coarse · 0.020</option></select></label>
+        <div class="keypad-direction">
+          <button id="kpAlignUp" aria-label="Move keypad up">↑<small>UP</small></button>
+          <div><button id="kpAlignLeft" aria-label="Move keypad left">←</button><strong>POSITION</strong><button id="kpAlignRight" aria-label="Move keypad right">→</button></div>
+          <button id="kpAlignDown" aria-label="Move keypad down">↓<small>DOWN</small></button>
+        </div>
+        <div class="keypad-size-grid">
+          <div><label>WIDTH</label><button data-kp-adjust="width:-">−</button><span id="kpAlignWidth">0.555</span><button data-kp-adjust="width:+">+</button></div>
+          <div><label>HEIGHT</label><button data-kp-adjust="height:-">−</button><span id="kpAlignHeight">0.475</span><button data-kp-adjust="height:+">+</button></div>
+        </div>
+        <div class="keypad-position-readout">X <b id="kpAlignLeftValue">0.225</b> &nbsp; Y <b id="kpAlignTopValue">1.555</b></div>
+        <p class="keypad-hint">Arrow keys / WASD move • Z/X width • C/V height • Enter saves • Esc closes. Hold Shift for larger steps.</p>
+        <div class="keypad-align-actions"><button id="kpAlignSave" class="primary">SAVE ALIGNMENT</button><button id="kpAlignTest" type="button" title="Save and compare clickable positions in the real ATM">SAVE &amp; TEST LIVE</button><button id="kpAlignExport">EXPORT JSON</button></div>
+        <div class="keypad-align-actions"><button id="kpAlignReset">RESET TO /WHIP VALUES</button><button id="kpAlignSide">MOVE PANEL ⇄</button></div>
+        <p id="kpAlignSaved" class="keypad-local-note">Saved on this PC only; export JSON to apply to every player.</p>
+        <div id="kpAlignExportBox" class="keypad-export hidden"><textarea id="kpAlignJson" readonly spellcheck="false"></textarea><button id="kpAlignCopy">COPY JSON</button></div>
+        <p class="keypad-alert hidden" id="kpAlignAlert"></p>
+      </div>
+    </aside>
+  </section>
+  <!-- Minimal physical bank card viewer: transparent world, card only, flip below. ESC closes. -->
+  <section id="cardViewer" class="card-viewer hidden" data-bank="maze" aria-label="View your bank card">
+    <div class="card-viewer-content">
+      <div class="card-viewer-stage" id="cardViewerStage" role="button" tabindex="0" aria-label="Flip bank card">
+        <div class="card-viewer-turn">
+          <div class="card-viewer-face card-viewer-front" id="cardViewerFront"></div>
+          <div class="card-viewer-face card-viewer-back" id="cardViewerBack"></div>
+        </div>
+      </div>
+      <button id="cardViewerFlip" class="card-viewer-flip" type="button" aria-label="Flip bank card" aria-pressed="false"><span aria-hidden="true">↻</span> FLIP</button>
+    </div>
+  </section>
   <div id="modal" class="modal hidden"><div class="modal-panel"><div class="modal-heading"><strong id="modalTitle">BANKING</strong><button id="modalClose" aria-label="Close">×</button></div><div id="modalContents"></div></div></div>
   <div id="toast" class="toast hidden"></div>
   <script src="app.js"></script>
   <script src="align.js"></script>
+  <script src="keypad_align.js"></script>
 </body>
 </html>

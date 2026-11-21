@@ -2,9 +2,9 @@ fx_version 'cerulean'
 game 'gta5'
 lua54 'yes'
 
-author 'CookieOCore'
-description 'Maze Bank — WHIP native branch, card, loans and in-world ATM banking'
-version '1.2.6'
+author 'Lunny Dev'
+description 'WHIP Banking — Fleeca, Maze Bank and Pacific Standard, cards, teller and DUI ATMs'
+version '2.8.0'
 
 dependency 'whip_core'
 dependency 'oxmysql'
@@ -15,6 +15,7 @@ ui_page 'html/index.html'
 shared_scripts {
     '@whip_core/lib/satellite.lua',
     'config.lua',
+    'shared/atm_hardware.lua',
     'shared/settings.lua'
 }
 
@@ -32,11 +33,15 @@ files {
     'html/index.html',
     'html/style.css',
     'html/align.css',
+    'html/keypad_align.css',
     'html/app.js',
     'html/align.js',
+    'html/keypad_align.js',
     'html/dui.html',
     'html/dui.css',
     'html/dui.js',
+    'html/card_insert.html',
+    'html/card_insert.js',
     'html/fonts/*.woff2',
     'html/img/items/*.webp'
 }

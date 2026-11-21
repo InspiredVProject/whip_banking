@@ -6,6 +6,8 @@ local ready = false
 local spawned = {}
 local bankBlipsReady = false
 local bankBlipIds = {}
+local BANK_KEYS = {fleeca=true,maze=true,pacific=true}
+local CARD_STYLES = {classic=true,black=true,metal=true}
 
 -- WHIP's pause-map reads names from the labels owned by whip_core/client/blips.lua.
 -- Native AddBlipForCoord markers DO NOT have a name in that map, even when
@@ -107,6 +109,37 @@ end
 local function char(source)
     return CORE:GetCharId(source)
 end
+local function bankDefinition(key)
+    return (Config.Banks or {})[key or '']
+end
+local function profileOf(charId)
+    if not ready or not charId then return nil end
+    local row = MySQL.single.await('SELECT bank_key AS bankKey, UNIX_TIMESTAMP(opened_at) AS openedAt FROM whip_banking_profiles WHERE char_id=?', {charId})
+    if row and BANK_KEYS[row.bankKey] then return row end
+    -- Migration: characters already holding a 1.2.x Maze Bank card keep their original account/card.
+    local legacy = MySQL.scalar.await('SELECT id FROM whip_banking_cards WHERE char_id=? LIMIT 1', {charId})
+    if legacy then
+        MySQL.insert.await("INSERT IGNORE INTO whip_banking_profiles (char_id,bank_key) VALUES (?,'maze')", {charId})
+        return {bankKey='maze',legacy=true}
+    end
+    return nil
+end
+local function bankDetails(key)
+    local def=bankDefinition(key)
+    if not def then return nil end
+    return {key=key,name=def.name,shortName=def.shortName,colour=def.colour,
+        savingsApr=tonumber(def.savingsApr) or Config.SavingsApr,
+        atmDailyLimit=tonumber(def.atmDailyLimit) or Config.AtmDailyLimit,
+        cardItem=def.cardItem}
+end
+local function availableBanks()
+    local out={}
+    for _, key in ipairs({'fleeca','maze','pacific'}) do
+        local detail=bankDetails(key)
+        if detail then out[#out+1]=detail end
+    end
+    return out
+end
 local function bankAccount(id)
     local n = tonumber(id)
     if not n or n < 1 or n % 1 ~= 0 then return nil end
@@ -157,8 +190,14 @@ local function changeScore(charId, points, reason)
 end
 local function cardRows(charId)
     return MySQL.query.await([[SELECT id, account_id AS accountId, card_number AS number, RIGHT(card_number, 4) AS last4,
-      card_name AS label, status, attempts, UNIX_TIMESTAMP(locked_until) AS lockedUntil,
-      UNIX_TIMESTAMP(created_at) AS createdAt FROM whip_banking_cards WHERE char_id=? ORDER BY id DESC]], {charId}) or {}
+      card_name AS label, COALESCE(bank_key,'maze') AS bankKey,
+      COALESCE(card_style,'classic') AS cardStyle,
+      COALESCE(item_name,'maze_bank_card') AS itemName,
+      status, attempts, UNIX_TIMESTAMP(locked_until) AS lockedUntil,
+      UNIX_TIMESTAMP(created_at) AS createdAt,
+      DATE_FORMAT(DATE_ADD(created_at, INTERVAL 4 YEAR),'%m/%y') AS expires,
+      UNIX_TIMESTAMP(DATE_ADD(created_at, INTERVAL 4 YEAR)) AS expiresAt
+      FROM whip_banking_cards WHERE char_id=? ORDER BY id DESC]], {charId}) or {}
 end
 local function myLoans(charId)
     return MySQL.query.await([[SELECT id, product, principal, remaining, rate, installment, term_months AS months,
@@ -185,20 +224,29 @@ local function summary(source, player)
         a.balance = cash(a.balance)
         if a.type ~= 'job' then total = total + a.balance end
     end
+    local selected=profileOf(charId)
+    local bankKey=selected and selected.bankKey or nil
     return {
         name = player.fullName or (player.firstName .. ' ' .. player.lastName),
+        bankKey=bankKey, bank=bankDetails(bankKey), bankOptions=availableBanks(),
+        bankSwitching=Config.AllowBankSwitching ~= false,
+        bankSelected=bankKey ~= nil,
         charId = charId, accounts = accounts, primary = main and main.accountId or 0,
         balance = main and cash(main.balance) or 0, total = total, cash = player.cash or 0,
         transactions = tx, credit = score(charId), cards = cardRows(charId), loans = myLoans(charId),
         bills = getBills(charId), schedules = getSchedules(charId), products = Config.Loans,
-        currency = Config.Currency, brand = Config.Brand, cardItem = Config.CardItem
+        currency = Config.Currency,
+        brand = (bankDefinition(bankKey) or {}).name or Config.Brand,
+        cardItem = (bankDefinition(bankKey) or {}).cardItem or Config.CardItem
     }
 end
 
 local function hasPhysicalCard(source, number)
-    local found = CORE:FindAllItems(source, Config.CardItem) or {}
-    for _, entry in ipairs(found) do
-        if entry.metadata and entry.metadata.number == number then return true end
+    for _, item in ipairs(Config.BankCardItems or {Config.CardItem}) do
+        local found = CORE:FindAllItems(source,item) or {}
+        for _, entry in ipairs(found) do
+            if entry.metadata and entry.metadata.number == number then return true end
+        end
     end
     return false
 end
@@ -215,6 +263,33 @@ local function randomDigits(count)
     return table.concat(out)
 end
 
+local function createPhysicalCard(source,player,account,pin,key,style)
+    local bank=bankDefinition(key)
+    if not bank then return false,'Unknown bank' end
+    if type(pin)~='string' or not pin:match('^%d%d%d%d$') then return false,'Choose a four-digit PIN' end
+    style=CARD_STYLES[style] and style or 'classic'
+    local number = (bank.cardPrefix or '5500') .. randomDigits(12)
+    local salt = randomDigits(22)
+    local item = bank.cardItems and bank.cardItems[style] or bank.cardItem
+    local label = bank.name .. ' ' .. (style == 'black' and 'Cash+' or style == 'metal' and 'Metal' or 'Everyday')
+    local id = MySQL.insert.await([[INSERT INTO whip_banking_cards
+      (char_id,account_id,card_number,pin_salt,pin_hash,bank_key,card_style,item_name,card_name)
+      VALUES (?,?,?,?,SHA2(CONCAT(?,?),256),?,?,?,?)]],
+      {player.charId,account,number,salt,pin,salt,key,style,item,label})
+    if not id then return false,'Could not create debit card' end
+    local issueDate=os.date('!*t',epoch())
+    local expiry=string.format('%02d/%02d',issueDate.month,(issueDate.year + 4) % 100)
+    local where,why=CORE:AddItem(source,item,1,
+      {number=number,last4=number:sub(-4),accountId=account,owner=player.fullName,
+       bankKey=key,cardStyle=style,issuer=bank.name,expires=expiry,tier=label},
+      {reason=bank.name .. ' issued debit card',noDrop=true})
+    if not where then
+        MySQL.update.await('DELETE FROM whip_banking_cards WHERE id=?',{id})
+        return false,why or 'Make space in your pockets for your debit card'
+    end
+    return true,{id=id,number=number,last4=number:sub(-4),bankKey=key,cardStyle=style,itemName=item}
+end
+
 local function createTables()
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS whip_banking_cards (
       id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, char_id INT UNSIGNED NOT NULL,
@@ -225,6 +300,25 @@ local function createTables()
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_card_char (char_id, status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS whip_banking_profiles (
+      char_id INT UNSIGNED NOT NULL PRIMARY KEY,
+      bank_key VARCHAR(16) NOT NULL,
+      opened_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_bank_key (bank_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+    -- In-place, idempotent migrations of the existing 1.2.x cards; preserve PIN hashes.
+    for _, field in ipairs({
+      {'bank_key', "VARCHAR(16) NOT NULL DEFAULT 'maze'"},
+      {'card_style', "VARCHAR(16) NOT NULL DEFAULT 'classic'"},
+      {'item_name', "VARCHAR(80) NOT NULL DEFAULT 'maze_bank_card'"}
+    }) do
+      local found=MySQL.scalar.await([[SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='whip_banking_cards' AND COLUMN_NAME=?]],{field[1]})
+      if tonumber(found)==0 then
+        MySQL.query.await('ALTER TABLE whip_banking_cards ADD COLUMN '..field[1]..' '..field[2])
+      end
+    end
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS whip_banking_loans (
       id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, char_id INT UNSIGNED NOT NULL,
       account_id INT UNSIGNED NOT NULL, product VARCHAR(24) NOT NULL,
@@ -403,19 +497,22 @@ local function serviceDue()
 end
 
 local function serviceInterest()
-    if Config.SavingsApr <= 0 then return end
+    if (tonumber(Config.SavingsApr) or 0) <= 0 and not (Config.Banks and ((tonumber(Config.Banks.fleeca.savingsApr) or 0) > 0 or (tonumber(Config.Banks.maze.savingsApr) or 0) > 0 or (tonumber(Config.Banks.pacific.savingsApr) or 0) > 0)) then return end
     local period = MySQL.scalar.await("SELECT DATE_FORMAT(DATE_SUB(UTC_DATE(),INTERVAL 1 MONTH),'%Y-%m')")
     if type(period) ~= 'string' then return end
     -- Only rows not yet paid for the previous completed month; safe after restarts and outages.
-    local accounts = MySQL.query.await([[SELECT a.accountId, a.balance FROM bank_accounts a
+    local accounts = MySQL.query.await([[SELECT a.accountId, a.balance, COALESCE(p.bank_key,'maze') AS bank_key FROM bank_accounts a
+      LEFT JOIN whip_banking_profiles p ON p.char_id=a.ownerCharId
       LEFT JOIN whip_banking_interest i ON i.account_id=a.accountId AND i.period=? AND i.status='paid'
       WHERE a.type='savings' AND a.closedAt IS NULL AND a.balance>0 AND i.account_id IS NULL LIMIT 100]], {period}) or {}
     for _, a in ipairs(accounts) do
-        local amountDue = math.floor((tonumber(a.balance) or 0) * Config.SavingsApr / 1200)
+        local rate = (bankDefinition(a.bank_key) or {}).savingsApr or Config.SavingsApr
+        local amountDue = math.floor((tonumber(a.balance) or 0) * rate / 1200)
         MySQL.insert.await([[INSERT IGNORE INTO whip_banking_interest (account_id,period,amount)
           VALUES (?,?,?)]], {a.accountId,period,amountDue})
-        local ref = 'Maze savings interest '..period
-        if amountDue > 0 and not transactionExists(a.accountId,ref) then
+        local ref = 'Savings interest '..period
+        local alreadyCredited=transactionExists(a.accountId,ref) or transactionExists(a.accountId,'Maze savings interest '..period)
+        if amountDue > 0 and not alreadyCredited then
             local ok = CORE:BankSystemDeposit(a.accountId,amountDue,{reason=ref})
             if not ok then goto continue end
         end
@@ -447,30 +544,38 @@ end)
 
 -- WHIP keeps networked teller peds stable as entity ownership moves between clients.
 Whip.register(function()
+    local allCardItems={Config.CardItem}
     Whip.core:RegisterItem(Config.CardItem, {
-        name = 'Maze Bank debit card', desc = 'A personalised, contactless bank card.',
-        weight = 0.02, type = 'misc', stack = false, maxStack = 1, usable = true
+        name='Maze Bank legacy debit card',desc='An existing Maze Bank contactless card.',
+        weight=0.02,type='misc',stack=false,maxStack=1,usable=true
     })
-    -- WHIP owns the inventory rules; its slot registry replaces the default key
-    -- slot and enforces the card-only restriction on the server. The custom SVG
-    -- appears in both WHIP's native inventory and the D11 inventory renderer.
-    if Config.CardAccessorySlot then
-        local ok, why = Whip.core:RegisterAccessorySlot({
-            slot = Config.CardAccessorySlot,
-            accepts = Config.CardItem,
-            keys = false,
-            label = 'Bank Card',
-            iconSvg = [[<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2.4"/><path d="M2.5 10h19"/><rect x="5.5" y="13.2" width="4.5" height="2.2" rx=".6"/><path d="M13 15h5"/></svg>]],
-        })
-        if not ok then
-            print(('[whip_banking] Bank Card accessory slot %s could not be registered: %s'):format(
-                tostring(Config.CardAccessorySlot), tostring(why)))
-        end
-    end
-    Whip.core:RegisterUseHandler(Config.CardItem, function(source, _, stack)
-        TriggerClientEvent('whip_banking:client:cardUsed', source, stack and stack.metadata or {})
+    Whip.core:RegisterUseHandler(Config.CardItem,function(source,_,stack)
+        TriggerClientEvent('whip_banking:client:cardUsed',source,stack and stack.metadata or {})
         return false
     end)
+    for _, bankKey in ipairs({'fleeca','maze','pacific'}) do
+        local def=Config.Banks[bankKey]
+        for _,style in ipairs({'classic','black','metal'}) do
+            local item=def.cardItems[style]
+            allCardItems[#allCardItems+1]=item
+            Whip.core:RegisterItem(item,{
+                name=def.name..' '..(style=='black' and 'Cash+' or style=='metal' and 'Metal' or 'Everyday')..' debit card',
+                desc='Personalised '..def.name..' contactless bank card.',
+                weight=0.02,type='misc',stack=false,maxStack=1,usable=true
+            })
+            Whip.core:RegisterUseHandler(item,function(source,_,stack)
+                TriggerClientEvent('whip_banking:client:cardUsed',source,stack and stack.metadata or {})
+                return false
+            end)
+        end
+    end
+    if Config.CardAccessorySlot then
+        local ok,why=Whip.core:RegisterAccessorySlot({
+            slot=Config.CardAccessorySlot,accepts=allCardItems,keys=false,label='Bank Card',
+            iconSvg=[[<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="5.5" width="19" height="13" rx="2"/><path d="M2.5 10h19"/><rect x="5" y="13" width="5" height="2" rx=".6"/></svg>]],
+        })
+        if not ok then print('[whip_banking] Card accessory slot: '..tostring(why)) end
+    end
     for i, entry in ipairs(Config.Branches) do
         if not spawned[i] then spawnTeller(i) end
     end
@@ -482,6 +587,80 @@ Whip.register(function()
         if not branch then return false, 'Speak to a bank teller at the counter' end
         tellerSessions[source] = {charId=player.charId, untilAt=epoch()+300}
         return true, Config.Branches[branch].name
+    end)
+
+    Whip.core:SecureCallback('whip_banking:selectBank', {
+      rateLimit=2500,params={{'bank','enum',{'fleeca','maze','pacific'}},
+        {'pin','string',4},{'style','enum',{'classic','black','metal'}}}
+    },function(source,player,bank,pin,style)
+      return reserved(source,'selectBank',function()
+        if not ready then return false,'Bank database is starting' end
+        if not isTeller(source) then return false,'Speak to a teller before choosing a bank' end
+        local old=profileOf(player.charId)
+        if old and old.bankKey==bank then return false,'You already bank here. Issue a new card from the Cards tab.' end
+        if old and Config.AllowBankSwitching==false then return false,'Bank switching is disabled' end
+        local account=CORE:GetDefaultBankAccount(source)
+        if not account then return false,'Your WHIP personal bank account is unavailable' end
+        local oldCards={}
+        if old then oldCards=MySQL.query.await([[SELECT card_number AS number,
+            COALESCE(item_name,'maze_bank_card') AS itemName FROM whip_banking_cards
+            WHERE char_id=? AND status!='cancelled']],{player.charId}) or {} end
+        local created,card=createPhysicalCard(source,player,account.accountId,pin,bank,style)
+        if not created then return false,card end
+        local updated=MySQL.update.await([[INSERT INTO whip_banking_profiles(char_id,bank_key)
+            VALUES(?,?) ON DUPLICATE KEY UPDATE bank_key=VALUES(bank_key)]],{player.charId,bank})
+        if updated==nil then
+            CORE:RemoveItem(source,card.itemName,1,{number=card.number},{reason='Bank registration rollback'})
+            MySQL.update.await('DELETE FROM whip_banking_cards WHERE id=?',{card.id})
+            return false,'Could not save your bank choice'
+        end
+        if #oldCards>0 then
+            MySQL.update.await([[UPDATE whip_banking_cards SET status='cancelled'
+              WHERE char_id=? AND id!=? AND status!='cancelled']],{player.charId,card.id})
+            for _,oldCard in ipairs(oldCards) do
+                CORE:RemoveItem(source,oldCard.itemName,1,{number=oldCard.number},
+                  {reason='Replaced by new bank card'})
+            end
+        end
+        sessions[source]=nil
+        return true,{bank=bankDetails(bank),card=card}
+      end)
+    end)
+
+    -- Lightweight one-time bank lookup for the local standby DUI. The response
+    -- is authoritative for this character, not a user-provided brand name.
+    Whip.core:SecureCallback('whip_banking:bankIdentity', {rateLimit=1000}, function(source, player)
+        if not ready then return false, 'Bank database is starting' end
+        local p=profileOf(player.charId)
+        return true,{bankKey=p and p.bankKey or nil}
+    end)
+
+    -- Read-only physical debit card preview. Do not send PINs, salts, hashes,
+    -- CVV or an unmasked number to the NUI. The item must still be possessed.
+    Whip.core:SecureCallback('whip_banking:cardPreview', {
+        rateLimit=350,params={{'number','string',19}}
+    }, function(source, player, number)
+        if not ready then return false, 'Bank database is starting' end
+        if type(number)~='string' or not number:match('^%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d$') then
+            return false,'Invalid bank card'
+        end
+        if not hasPhysicalCard(source,number) then
+            return false,'This card is not in your inventory'
+        end
+        local card=MySQL.single.await([[SELECT id, RIGHT(card_number,4) AS last4,
+            COALESCE(bank_key,'maze') AS bankKey,
+            COALESCE(card_style,'classic') AS cardStyle,
+            status,card_name AS label,
+            DATE_FORMAT(DATE_ADD(created_at, INTERVAL 4 YEAR),'%m/%y') AS expires
+            FROM whip_banking_cards WHERE char_id=? AND card_number=? LIMIT 1]],
+            {player.charId,number})
+        if not card or not bankDefinition(card.bankKey) then
+            return false,'This card is no longer linked to your account'
+        end
+        return true,{id=card.id,last4=card.last4,bankKey=card.bankKey,
+            cardStyle=card.cardStyle,status=card.status,label=card.label,
+            expires=card.expires,holder=player.fullName or 'CARDHOLDER',
+            bankName=bankDefinition(card.bankKey).name}
     end)
 
     Whip.core:SecureCallback('whip_banking:overview', {rateLimit=450}, function(source, player)
@@ -507,35 +686,23 @@ Whip.register(function()
             if not fromAcc then return false, denied end
             local target = CORE:GetBankAccount({number=textSafe(number,32)})
             if not target then return false, 'Recipient account not found' end
-            local ok, why = CORE:BankTransfer(from, target.accountId, value, source, {reason='Maze Bank transfer'})
+            local ok, why = CORE:BankTransfer(from, target.accountId, value, source, {reason=((bankDefinition((profileOf(char(source)) or {}).bankKey) or {}).name or 'Bank') .. ' transfer'})
             return ok, why
         end)
     end)
 
     Whip.core:SecureCallback('whip_banking:issueCard', {
-        rateLimit=1500, params={{'account','id'},{'pin','string',4}}
-    }, function(source, player, account, pin)
+        rateLimit=1500, params={{'account','id'},{'pin','string',4},{'style','enum',{'classic','black','metal'}}}
+    }, function(source, player, account, pin, style)
         return reserved(source, 'issue', function()
             if not isTeller(source) then return false, 'Speak to a bank teller to issue a card' end
-            if not pin:match('^%d%d%d%d$') then return false, 'Choose a four-digit PIN' end
+            local p=profileOf(player.charId)
+            if not p then return false,'Choose your bank first' end
             local acc, denied = myAccount(source, account, 'owner')
             if not acc then return false, denied end
             local have = MySQL.scalar.await("SELECT COUNT(*) FROM whip_banking_cards WHERE char_id=? AND status != 'cancelled'", {player.charId}) or 0
-            if have >= Config.MaxCards then return false, 'Maximum active cards reached' end
-            local number = '5500' .. randomDigits(12)
-            local salt = randomDigits(22)
-            local id = MySQL.insert.await([[INSERT INTO whip_banking_cards
-              (char_id,account_id,card_number,pin_salt,pin_hash) VALUES (?,?,?,?,SHA2(CONCAT(?,?),256))]],
-              {player.charId,account,number,salt,pin,salt})
-            if not id then return false, 'Could not create card' end
-            local where, why = CORE:AddItem(source, Config.CardItem, 1,
-              {number=number, last4=number:sub(-4), accountId=account, owner=player.fullName},
-              {reason='Maze Bank issued debit card', noDrop=true})
-            if not where then
-                MySQL.update.await('DELETE FROM whip_banking_cards WHERE id=?', {id})
-                return false, why or 'Make space in your pockets'
-            end
-            return true, {id=id, number=number, last4=number:sub(-4)}
+            if tonumber(have)>=Config.MaxCards then return false, 'Maximum active cards reached' end
+            return createPhysicalCard(source,player,account,pin,p.bankKey,style)
         end)
     end)
 
@@ -568,9 +735,14 @@ Whip.register(function()
     }, function(source, player, number, pin)
         if not pin:match('^%d%d%d%d$') then return false, 'Four-digit PIN required' end
         local row = MySQL.single.await([[SELECT *, (pin_hash=SHA2(CONCAT(?,pin_salt),256)) AS matches,
-          UNIX_TIMESTAMP(locked_until) AS lockEpoch FROM whip_banking_cards
+          UNIX_TIMESTAMP(locked_until) AS lockEpoch,
+          UNIX_TIMESTAMP(DATE_ADD(created_at,INTERVAL 4 YEAR)) AS expiresEpoch FROM whip_banking_cards
           WHERE card_number=? AND char_id=?]], {pin,number,player.charId})
         if not row or row.status ~= 'active' then return false, 'Card blocked or not found' end
+        local expiresEpoch=tonumber(row.expiresEpoch)
+        if expiresEpoch and expiresEpoch <= epoch() then
+            return false,'This card has expired. Request a replacement at the bank teller'
+        end
         if row.lockEpoch and tonumber(row.lockEpoch) > epoch() then return false, 'PIN locked for 15 minutes' end
         if not hasPhysicalCard(source, number) then return false, 'Your bank card is not in your pockets' end
         if not (row.matches == true or tonumber(row.matches) == 1) then
@@ -579,13 +751,17 @@ Whip.register(function()
               WHERE id=?]], {row.id})
             return false, (row.attempts >= 2) and 'Card locked for 15 minutes' or 'Incorrect PIN'
         end
+        local p=profileOf(player.charId)
+        local key=row.bank_key or 'maze'
+        if not p or p.bankKey~=key then return false,'This card belongs to your previous bank' end
         local acc, why = myAccount(source, row.account_id, 'view')
         if not acc then return false, why end
         MySQL.update.await('UPDATE whip_banking_cards SET attempts=0,locked_until=NULL WHERE id=?', {row.id})
         sessions[source] = {charId=player.charId, cardId=row.id, cardNumber=number,
-          accountId=row.account_id, untilAt=epoch()+120}
+          accountId=row.account_id, untilAt=epoch()+120,bankKey=key}
         return true, {accountId=row.account_id, balance=acc.balance, label=acc.label,
-          last4=number:sub(-4), limit=math.max(0,Config.AtmDailyLimit-todayWithdrawn(player.charId,row.account_id))}
+          last4=number:sub(-4), bankKey=key, brand=(bankDefinition(key) or {}).name,
+          limit=math.max(0,((bankDefinition(key) or {}).atmDailyLimit or Config.AtmDailyLimit)-todayWithdrawn(player.charId,row.account_id))}
     end)
 
     Whip.core:SecureCallback('whip_banking:atmPreflight', {
@@ -595,7 +771,8 @@ Whip.register(function()
         if not current or current.charId ~= player.charId or current.untilAt < epoch()
             or current.accountId ~= account then return false, 'Insert your bank card and enter its PIN first' end
         if not hasPhysicalCard(source, current.cardNumber) then return false, 'Bank card no longer in your pockets' end
-        if todayWithdrawn(player.charId,account)+value > Config.AtmDailyLimit then
+        local cap=(bankDefinition(current.bankKey) or {}).atmDailyLimit or Config.AtmDailyLimit
+        if todayWithdrawn(player.charId,account)+value > cap then
             return false, 'Your ATM daily withdrawal limit has been reached'
         end
         local _, why = myAccount(source,account,'withdraw')
@@ -606,7 +783,8 @@ Whip.register(function()
     Whip.core:SecureCallback('whip_banking:atmStatus', {rateLimit=250}, function(source, player)
         local current=sessions[source]
         if not current or current.charId~=player.charId then return false, 'ATM session expired' end
-        return true, math.max(0,Config.AtmDailyLimit-todayWithdrawn(player.charId,current.accountId))
+        local cap=(bankDefinition(current.bankKey) or {}).atmDailyLimit or Config.AtmDailyLimit
+        return true, math.max(0,cap-todayWithdrawn(player.charId,current.accountId))
     end)
 
     Whip.core:SecureCallback('whip_banking:atmEnd', {rateLimit=300}, function(source)
@@ -736,4 +914,13 @@ end)
 exports('GetCreditScore', function(targetSource)
     local owner = char(targetSource)
     return owner and score(owner) or false
+end)
+
+-- Called only by trusted server resources (e.g. whip_phone) for the current character.
+exports('GetBankProfile',function(source)
+    if not ready then return nil end
+    local charId=CORE:GetCharId(source)
+    if not charId then return nil end
+    local p=profileOf(charId)
+    return p and bankDetails(p.bankKey) or {key='unselected',name='Choose your bank'}
 end)
