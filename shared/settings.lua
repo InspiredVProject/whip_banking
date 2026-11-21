@@ -1,6 +1,23 @@
 -- Native WHIP /whip -> Settings -> Banking page. WHIP validates, persists and replicates changes.
 -- No extra dashboard resource, admin command, or config-editing restart is required.
 
+-- WHIP validates every /whip setting against the CURRENT config.lua default.
+-- A blank string is not valid for a non-nullable text field: without this
+-- guard, Blips.LegendName is silently left off the Banking settings page.
+-- Repair the in-memory default here rather than overwriting admins' custom
+-- config.lua (including tuned DUI and physical keypad alignment settings).
+if type(Config.Blips) == 'table' then
+    local current = Config.Blips.LegendName
+    if type(current) ~= 'string' or not current:find('%S') then
+        local brand = type(Config.Brand) == 'string' and Config.Brand or ''
+        brand = brand:match('^%s*(.-)%s*$')
+        if brand == '' then brand = 'Maze Bank' end
+        Config.Blips.LegendName = brand:lower():gsub('(%a)([%w]*)', function(first, rest)
+            return first:upper() .. rest
+        end)
+    end
+end
+
 local groups = {
     { label = 'Bank map blips', settings = {
         { key='Blips.Enabled', type='bool', label='Show all bank branches',
@@ -15,7 +32,7 @@ local groups = {
         { key='Blips.BranchNames', type='bool', label='Include branch names in blips',
           help='OFF: one Maze Bank legend entry with a count of all banks. ON: individual names such as Maze Bank - Legion Square.' },
         { key='Blips.LegendName', type='string', maxLen=40, label='Map legend bank name',
-          help='Leave empty to use the bank display name, such as Maze Bank. WHIP owns the blips and uses this text in its pause-map legend.' },
+          help='Required: a non-empty map legend title such as Maze Bank. WHIP uses this text for its pause-map legend. The resource fills an empty config default automatically.' },
     } },
     { label='Banks & customer choice', settings={
         {key='AllowBankSwitching',type='bool',label='Allow changing banks at tellers',
